@@ -74,7 +74,7 @@ if(NEXKE_UP STREQUAL "1")
     add_definitions(-DNEXKE_UP)
 else()
     if(NEXNIX_ARCH STREQUAL "i386")
-        set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -march=i386")
+        set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -march=i586")
     endif()
 endif()
 

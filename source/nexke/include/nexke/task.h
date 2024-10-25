@@ -32,14 +32,15 @@ typedef void (*NkThreadEntry) (void*);
 // Defines an object this thread is waiting on, and is used to create priority inheritance chains
 typedef struct _waitobj
 {
-    NkLink_t link;
+    NkLink_t link;         // Link in wait queue
     NkThread_t* owner;     // Owner of this object
     NkThread_t* waiter;    // Waiter
     int type;              // Type of object being waited on
     ktime_t timeout;       // Timeout of this object
     void* obj;             // Pointer to object being waited on
-    int result;
+    int result;            // Result of wait
     spinlock_t lock;
+    NkLink_t ownerLink;    // Link on list of owned wait objects
 } TskWaitObj_t;
 
 #define TSK_THREAD_MAX_WAIT 4
@@ -51,23 +52,23 @@ typedef struct _waitobj
 #define TSK_WAITOBJ_MUTEX     4
 #define TSK_WAITOBJ_QUEUE     5
 
-#define TSK_WAITOBJ_IN_PROG    0
-#define TSK_WAITOBJ_SUCCESS    1
-#define TSK_WAITOBJ_TIMEOUT    2
-#define TSK_WAITOBJ_OWNER_DIED 3
+#define TSK_WAITOBJ_IN_PROG 0
+#define TSK_WAITOBJ_SUCCESS 1
+#define TSK_WAITOBJ_TIMEOUT 2
 
 // Thread structure
 typedef struct _thread
 {
-    NkLink_t link;    // Link in ready queue / wait lists
-                      // At head so we don't have to use LINK_CONTAINER
+    NkLink_t link;      // Link in ready queue / wait lists
+                        // At head so we don't have to use LINK_CONTAINER
+    spinlock_t lock;    // Lock for this thread
     // Thread identity info
-    id_t tid;             // Thread ID
-    const char* name;     // Name of thread
-    int priority;         // Priority of this thread
-    int state;            // State of this thread
-    int flags;            // Flags for this thread
-    atomic_t refCount;    // Things referencing this thread
+    id_t tid;            // Thread ID
+    const char* name;    // Name of thread
+    int priority;        // Priority of this thread
+    int state;           // State of this thread
+    int flags;           // Flags for this thread
+    int refCount;        // Things referencing this thread
     // Quantum info
     int quantaLeft;    // Quantum ticks left
     int quantum;       // Quantum assigned to thread
@@ -84,6 +85,9 @@ typedef struct _thread
     // Wait info
     TskWaitObj_t wait;           // Object we are waiting on
     TskWaitObj_t timer;          // Timer we are waiting on
+    NkList_t ownedWaits;         // Wait objects we own
+                                 // This list is only over manipulated by this thread
+                                 // so we can access it locklessly
     TskWaitQueue_t joinQueue;    // Threads joined to this thread
     // Thread flags
     bool preempted;               // Wheter this thread has been preempted
@@ -145,11 +149,13 @@ void TskSchedule();
 
 // Asserts and sets up a wait
 // IPL must be raised and object must be locked
-TskWaitObj_t* TskAssertWait (NkThread_t* objOwner, ktime_t timeout, void* obj, int type);
+TskWaitObj_t* TskAssertWait (ktime_t timeout, void* obj, int type);
 
 // Wait on a wait object
 // Returns true if wait was successful, false if it failed
-bool TskWaitOnObj (TskWaitObj_t* waitObj);
+bool TskWaitOnObj (TskWaitObj_t* waitObj, int flags);
+
+#define TSK_WAITOBJ_OWN (1 << 0)
 
 // Clears a wait on a wait object
 // If timeout already expired, returns false
@@ -180,7 +186,9 @@ static inline void TskEnablePreempt()
 // Refs a thread
 static inline void TskRefThread (NkThread_t* thread)
 {
-    NkAtomicAdd (&thread->refCount, 1);
+    NkSpinLock (&thread->lock);
+    ++thread->refCount;
+    NkSpinUnlock (&thread->refCount);
 }
 
 // Gets current thread

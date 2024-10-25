@@ -243,12 +243,14 @@ PltHwClock_t* PltInitClock()
 PltHwTimer_t* PltInitTimer()
 {
     PltHwTimer_t* timer = NULL;
-    // Only do HPET timer with HPET clock
-    if (nkPlatform.clock->type == PLT_CLOCK_HPET)
-        timer = PltHpetInitTimer();
+    // Prefer APIC
+    if (!NkReadArg ("-usehpet"))
+        timer = PltApicInitTimer();
     if (!timer)
     {
-        timer = PltApicInitTimer();
+        // Only use HPET timer with HPET clock
+        if (nkPlatform.clock->type == PLT_CLOCK_HPET)
+            timer = PltHpetInitTimer();
         if (!timer)
             timer = PltPitInitTimer();
     }

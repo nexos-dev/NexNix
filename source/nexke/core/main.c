@@ -135,11 +135,15 @@ Copyright (C) 2023 - 2024 The Nexware Project\n",
     assert (0);
 }
 
+TskWaitQueue_t queue = {0};
+
 void t1 (void*)
 {
     TskSleepThread (PLT_NS_IN_SEC);
+    TskBroadcastWaitQueue (&queue, 0);
     NkLogDebug ("got here\n");
-    TskTerminateSelf (0);
+    for (;;)
+        ;
 }
 
 // Kernel initial thread
@@ -147,9 +151,10 @@ static void NkInitialThread (void*)
 {
     // Start interrupts now
     CpuUnholdInts();
+    TskInitWaitQueue (&queue, TSK_WAITOBJ_QUEUE);
     NkThread_t* thread = TskCreateThread (t1, NULL, "t1", 0);
     TskStartThread (thread);
-    TskJoinThreadTimeout (thread, PLT_NS_IN_SEC / 2);
+    TskWaitQueueTimeout (&queue, 50000);
     NkLogDebug ("got here 2\n");
     for (;;)
         ;

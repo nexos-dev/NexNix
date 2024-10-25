@@ -76,6 +76,7 @@ NkThread_t* TskCreateThread (NkThreadEntry entry, void* arg, const char* name, i
     thread->refCount = 1;
     thread->flags = flags;
     TskInitWaitQueue (&thread->joinQueue, TSK_WAITOBJ_QUEUE);
+    NkListInit (&thread->ownedWaits);
     // Initialize CPU specific context
     thread->context = CpuAllocContext ((uintptr_t) TskThreadEntry);
     if (!thread->context)
@@ -108,6 +109,7 @@ void TskTerminateSelf (int code)
     // Lock the scheduler
     ipl_t ipl = PltRaiseIpl (PLT_IPL_HIGH);
     NkThread_t* thread = TskGetCurrentThread();
+    NkSpinLock (&thread->lock);
     assert (thread->state == TSK_THREAD_RUNNING);
     // Set our state and exit code
     thread->state = TSK_THREAD_TERMINATING;
@@ -116,8 +118,28 @@ void TskTerminateSelf (int code)
     TskBroadcastWaitQueue (&thread->joinQueue, 0);
     // Close it in case someone else trys to join before being destroyed
     TskCloseWaitQueue (&thread->joinQueue, 0);
-    // Add to terminator list
-    NkWorkQueueSubmit (nkTerminator, (void*) thread);
+    // Wake all owned wait objects
+    NkLink_t* iter = NkListFront (&thread->ownedWaits);
+    while (iter)
+    {
+        TskWaitObj_t* obj = LINK_CONTAINER (iter, TskWaitObj_t, ownerLink);
+        if (obj->waiter)
+        {
+            bool wakeSucess = TskClearWait (obj, TSK_WAITOBJ_SUCCESS);
+            if (wakeSucess)
+                TskWakeObj (obj);
+        }
+        iter = NkListIterate (iter);
+    }
+    // Add to terminator list if and only if dropping the reference count would cause thread
+    // destruction Other wise we don't need to This is because somebody still needs the thread
+    // structure so making the work queue simple decrement a variable when it's not actually going
+    // to destroy it is unecessary
+    if (thread->refCount == 1)
+        NkWorkQueueSubmit (nkTerminator, (void*) thread);
+    else
+        --thread->refCount;
+    NkSpinUnlock (&thread->lock);
     // Now schedule another thread
     TskSchedule();
     // UNREACHABLE
@@ -127,19 +149,23 @@ void TskTerminateSelf (int code)
 void TskDestroyThread (NkThread_t* thread)
 {
     // Destory memory structures if ref count is 0
-    if (NkAtomicSub (&thread->refCount, 1) == 0)
+    NkSpinLock (&thread->lock);
+    if (--thread->refCount == 0)
     {
+        nkThreadTable[thread->tid] = NULL;
         NkTimeFreeEvent (thread->timeout);
         CpuDestroyContext (thread->context);
         NkFreeResource (nkThreadRes, thread->tid);
         MmCacheFree (nkThreadCache, thread);
     }
+    else
+        NkSpinUnlock (&thread->lock);
 }
 
 // Asserts and sets up a wait
 // IPL must be raised and object must be locked
 // Locks the current thread while asserting the wait
-TskWaitObj_t* TskAssertWait (NkThread_t* objOwner, ktime_t timeout, void* obj, int type)
+TskWaitObj_t* TskAssertWait (ktime_t timeout, void* obj, int type)
 {
     // Get current thread
     NkCcb_t* ccb = CpuGetCcb();
@@ -151,6 +177,8 @@ TskWaitObj_t* TskAssertWait (NkThread_t* objOwner, ktime_t timeout, void* obj, i
     // Prepare the wait object
     TskWaitObj_t* waitObj = &thread->wait;
     NkSpinLock (&waitObj->lock);
+    NkListInitLink (&waitObj->link);
+    NkListInitLink (&waitObj->link);
     waitObj->obj = obj;
     waitObj->type = type;
     waitObj->waiter = thread;
@@ -169,15 +197,22 @@ TskWaitObj_t* TskAssertWait (NkThread_t* objOwner, ktime_t timeout, void* obj, i
 
 // Wait on a wait object
 // Returns true if wait was successful, false if it failed
-bool TskWaitOnObj (TskWaitObj_t* waitObj)
+bool TskWaitOnObj (TskWaitObj_t* waitObj, int flags)
 {
-    assert (waitObj->waiter == TskGetCurrentThread());
-    bool res = true;
     // Wait
     TskSchedule();
     NkSpinLock (&waitObj->lock);
     if (waitObj->result != TSK_WAITOBJ_SUCCESS)
         return false;
+    if (flags & TSK_WAITOBJ_OWN)
+    {
+        // Gain ownership now
+        NkThread_t* thread = TskGetCurrentThread();
+        NkListAddFront (&thread->ownedWaits, &waitObj->ownerLink);
+        waitObj->owner = thread;
+    }
+    else
+        waitObj->owner = NULL;
     return true;
 }
 
@@ -193,6 +228,9 @@ bool TskClearWait (TskWaitObj_t* waitObj, int result)
         NkSpinUnlock (&waitObj->lock);
         return false;    // Objects already awoken
     }
+    // De-register any pending time events
+    if (result != TSK_WAITOBJ_TIMEOUT && waitObj->timeout)
+        NkTimeDeRegEvent (waitObj->waiter->timeout);
     waitObj->result = result;
     return true;    // We return a locked wait object
 }

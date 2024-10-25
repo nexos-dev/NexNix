@@ -61,14 +61,13 @@ errno_t TskWaitQueueFlags (TskWaitQueue_t* queue, int flags, ktime_t timeout)
         goto cleanup;
     }
     // Now we can prepare to wait
-    TskWaitObj_t* waitObj =
-        TskAssertWait (TskGetCurrentThread(), timeout, queue, queue->queueObject);
+    TskWaitObj_t* waitObj = TskAssertWait (timeout, queue, queue->queueObject);
     assert (waitObj);
     // Add to sleepers
     NkListAddBack (&queue->waiters, &waitObj->link);
     // Block now, but first unlock the queue
     NkSpinUnlock (&queue->lock);
-    bool waitStatus = TskWaitOnObj (waitObj);
+    bool waitStatus = TskWaitOnObj (waitObj, (flags & TSK_WAIT_NOT_OWNER) ? 0 : TSK_WAITOBJ_OWN);
     NkSpinLock (&queue->lock);
     if (!waitStatus)
     {
@@ -123,11 +122,13 @@ static FORCEINLINE void tskWakeThread (TskWaitQueue_t* queue, TskWaitObj_t* wait
 static FORCEINLINE void tskWakeQueue (TskWaitQueue_t* queue)
 {
     // Iterate through list
-    while (NkListFront (&queue->waiters))
+    NkLink_t* iter = NkListFront (&queue->waiters);
+    while (iter)
     {
-        TskWaitObj_t* waiter = (TskWaitObj_t*) NkListFront (&queue->waiters);
+        TskWaitObj_t* waiter = (TskWaitObj_t*) iter;
         // Wake it
         tskWakeThread (queue, waiter);
+        iter = NkListIterate (iter);
     }
 }
 

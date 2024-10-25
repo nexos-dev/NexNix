@@ -45,6 +45,9 @@ static ktime_t NkTimeDeltaToDeadline (ktime_t* delta)
     // Get ref tick
     ktime_t refTick = platform->clock->getTime();
     ktime_t deadline = refTick + *delta;
+    // Round to next multiple of timer precision
+    deadline += platform->timer->precision;
+    deadline -= (deadline % platform->timer->precision);
     // If deadline equals ref tick (i.e., delta is 0) increase it by one tick
     if (refTick == deadline)
     {
@@ -223,7 +226,7 @@ static FORCEINLINE void nkDrainTimeQueue (NkCcb_t* ccb, NkList_t* list, NkLink_t
 {
     // We know a timer (or multiple) has/have expired, execute each cb
     NkTimeEvent_t* event = LINK_CONTAINER (iter, NkTimeEvent_t, link);
-    ktime_t tick = event->deadline;
+    ktime_t tick = ccb->nextDeadline;
     while (iter && tick == event->deadline)
     {
         NkSpinLock (&event->lock);
@@ -259,7 +262,7 @@ static FORCEINLINE void nkDrainTimeQueue (NkCcb_t* ccb, NkList_t* list, NkLink_t
 }
 
 // Timer expiry handler
-static void NkTimeHandler()
+void NkTimeHandler()
 {
     NkCcb_t* ccb = CpuGetCcb();
     ipl_t ipl = PltRaiseIpl (PLT_IPL_HIGH);
@@ -273,6 +276,8 @@ static void NkTimeHandler()
     {
         // Check if timers have expired
         NkTimeEvent_t* event = LINK_CONTAINER (iter, NkTimeEvent_t, link);
+        // Set deadline in CCB
+        ccb->nextDeadline = event->deadline;
         if (event->deadline == platform->clock->getTime())
             nkDrainTimeQueue (ccb, list, iter);
     }

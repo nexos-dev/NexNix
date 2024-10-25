@@ -26,6 +26,8 @@ typedef uint64_t paddr_t;
 typedef struct _nkarchccb
 {
     uint64_t features;    // CPU feature flags
+    bool intHold;         // Interrupt hold state
+    bool intReq;          // Interrupt enable request
 } NkArchCcb_t;
 
 void __attribute__ ((noreturn)) CpuCrash();
@@ -58,16 +60,31 @@ void __attribute__ ((noreturn)) CpuCrash();
 #define NEXKE_SERIAL_MMIO_BASE 0xFFFFFFFF90000000
 
 // MSR functions
-#define CpuReadMsr(msr)                              \
+#define CpuReadSpr(spr)                              \
     ({                                               \
         uint64_t __tmp = 0;                          \
-        asm volatile ("mrs %0, " msr : "=r"(__tmp)); \
+        asm volatile ("mrs %0, " spr : "=r"(__tmp)); \
         __tmp;                                       \
     })
 
-#define CpuWriteMsr(msr, val) asm volatile ("msr " msr ", %0" : : "r"(val));
+#define CpuWriteSpr(spr, val) asm volatile ("msr " spr ", %0" : : "r"(val));
+
+// Gets current exception level
+int CpuGetEl();
 
 // Hint to CPU we are spinning
 void CpuSpin();
+
+// DAIF helpers
+#define CPU_ARMV8_INT_D (1 << 9)
+#define CPU_ARMV8_INT_A (1 << 8)
+#define CPU_ARMV8_INT_I (1 << 7)
+#define CPU_ARMV8_INF_F (1 << 6)
+
+// CPU data structures
+typedef struct _cputhread
+{
+
+} CpuThread_t;
 
 #endif

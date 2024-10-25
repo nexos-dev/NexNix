@@ -170,7 +170,7 @@ static bool PltHpetDispatch (NkInterrupt_t* intObj, CpuIntContext_t* ctx)
 }
 
 // Gets time of clock
-static ktime_t PltHpetGetTime()
+static FORCEINLINE ktime_t pltHpetGetCount()
 {
     ktime_t ret = 0;
     if (!hpet.isTimer64)
@@ -209,7 +209,12 @@ static ktime_t PltHpetGetTime()
             ret = ((ktime_t) highVal << 32ULL) | lowVal;    // Set it
         }
     }
-    return pltFromHpetTime (ret);
+    return ret;
+}
+
+static ktime_t PltHpetGetTime()
+{
+    return pltFromHpetTime (pltHpetGetCount());
 }
 
 // Sets timer callback
@@ -218,16 +223,22 @@ static void PltHpetSetCb (void (*cb)())
     pltHpetTimer.callback = cb;
 }
 
+#define PLT_HPET_ARM_DELAY 20000
+
+// Called by us if arming skipped the deadline
+extern void NkTimeHandler();
+
 // Arms timer
 static void PltHpetArmTimer (ktime_t delta)
 {
+    PltHwClock_t* clock = PltGetPlatform()->clock;
+    assert (clock->type == PLT_CLOCK_HPET);
     // Disarm if needed
     if (hpet.armCount)
         hpet.armCount = 0, hpet.finalArm = 0;
-    // Get comparator value
-    ktime_t refTick = PltGetPlatform()->clock->getTime();
-    ktime_t time = refTick + delta;
-    ktime_t compVal = pltToHpetTime (time);
+    ktime_t hpetDelta = pltToHpetTime (delta);
+    ktime_t refTick = pltHpetGetCount();
+    ktime_t compVal = refTick + hpetDelta;
     // Check for overflow on 32 bit timers
     if (!hpet.isTimer64 && compVal > UINT32_MAX)
     {
@@ -241,11 +252,15 @@ static void PltHpetArmTimer (ktime_t delta)
         hpet.finalArm = compVal % (UINT32_MAX + 1);
         compVal = firstArm;
     }
-    ktime_t minComp = pltToHpetTime (refTick) + hpet.minDelta;
-    if (compVal < minComp)
-        compVal = minComp;    // To avoid interrupt loss
-    // Write it
     pltHpetTimerWrite (0, PLT_HPET_TIMER_COMP, compVal);
+    // Check if we missed the interrupt
+    // If the clock has surpassed the comparator and the interrupt hasn't been set
+    // we have to handle it now
+    if (compVal < pltHpetGetCount() && !(pltHpetRead64 (PLT_HPET_INT_STATUS) & (1 << 0)))
+    {
+        // Handle the interrupt now
+        NkTimeHandler();
+    }
 }
 
 // Polls clock for specified ns
@@ -300,6 +315,8 @@ PltHwClock_t* PltHpetInitClock()
     // Check for 64-bit
     if (genCap & PLT_HPET_COUNT_SZ)
         hpet.isTimer64 = true;
+    // Set min delta
+    hpet.minDelta = pltToHpetTime (hpetAcpi->minPeriod);
     // Enable it
     pltHpetWrite64 (PLT_HPET_GEN_CONF, pltHpetRead64 (PLT_HPET_GEN_CONF) | PLT_HPET_ENABLE);
     NkLogDebug ("nexke: using HPET as clock, precision %ldns\n", pltHpetClock.precision);
@@ -316,8 +333,6 @@ PltHwTimer_t* PltHpetInitTimer()
     pltHpetTimer.precision = pltHpetClock.precision;
     // Figure out max interval
     pltHpetTimer.maxInterval = pltFromHpetTime ((hpet.isTimer64) ? UINT64_MAX : UINT32_MAX);
-    // Set minimum delta that can occur without loss
-    hpet.minDelta = 12000 / pltHpetTimer.precision;    // TODO: we need a better way to do this
     // Program timer
     uint64_t timerCnf = pltHpetTimerRead (0, PLT_HPET_TIMER_CONF);
     if (timerCnf & PLT_HPET_FSB_CAP)

@@ -30,9 +30,9 @@ uintptr_t MmMulGetPhysEarly (uintptr_t virt)
     uintptr_t ttbr = 0;
     uintptr_t pgAddr = virt & MUL_CANONICAL_MASK;
     if (virt & MUL_CANONICAL_BIT)
-        ttbr = CpuReadMsr ("TTBR1_EL1") & ~(1 << 0);
+        ttbr = CpuReadSpr ("TTBR1_EL1") & ~(1 << 0);
     else
-        ttbr = CpuReadMsr ("TTBR0_EL1") & ~(1 << 0);
+        ttbr = CpuReadSpr ("TTBR0_EL1") & ~(1 << 0);
     pte_t* curSt = (pte_t*) ttbr;
     for (int i = mulMaxLevel; i > 1; --i)
     {
@@ -62,9 +62,9 @@ void MmMulMapEarly (uintptr_t virt, paddr_t phys, int flags)
     uintptr_t ttbr = 0;
     uintptr_t pgAddr = virt & MUL_CANONICAL_MASK;
     if (virt & MUL_CANONICAL_BIT)
-        ttbr = CpuReadMsr ("TTBR1_EL1") & ~(1 << 0);
+        ttbr = CpuReadSpr ("TTBR1_EL1") & ~(1 << 0);
     else
-        ttbr = CpuReadMsr ("TTBR0_EL1") & ~(1 << 0);
+        ttbr = CpuReadSpr ("TTBR0_EL1") & ~(1 << 0);
     pte_t* curSt = (pte_t*) ttbr;
     for (int i = mulMaxLevel; i > 1; --i)
     {

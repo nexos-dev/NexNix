@@ -253,7 +253,7 @@ static void cpuidSetFeatures (NkCcb_t* ccb)
     // Call 80000007h
     if (maxExtEax >= 0x80000007)
     {
-        cpuCpuid (0x80000001, 0, &cpuid);
+        cpuCpuid (0x80000007, 0, &cpuid);
         uint32_t edx = cpuid.edx;
         if (edx & CPUID_FEATURE_INVARIANT_TSC)
             archCcb->features |= CPU_FEATURE_INVARIANT_TSC;

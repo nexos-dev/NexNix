@@ -19,6 +19,7 @@
 #define _NK_LIST_H
 
 #include <assert.h>
+#include <nexke/types.h>
 #include <stddef.h>
 #include <stdint.h>
 
@@ -41,13 +42,13 @@ typedef struct _list
     ((type*) ((uintptr_t) (addr) - (uintptr_t) (&((type*) 0)->field)))
 
 // Initializes a list
-static inline void NkListInit (NkList_t* list)
+static FORCEINLINE void NkListInit (NkList_t* list)
 {
     list->head = 0, list->tail = 0;
 }
 
 // Adds item to front of list
-static inline void NkListAddFront (NkList_t* list, NkLink_t* item)
+static FORCEINLINE void NkListAddFront (NkList_t* list, NkLink_t* item)
 {
     item->next = list->head;
     item->prev = NULL;
@@ -59,7 +60,7 @@ static inline void NkListAddFront (NkList_t* list, NkLink_t* item)
 }
 
 // Adds item to back of list
-static inline void NkListAddBack (NkList_t* list, NkLink_t* item)
+static FORCEINLINE void NkListAddBack (NkList_t* list, NkLink_t* item)
 {
     item->prev = list->tail;
     item->next = NULL;
@@ -71,7 +72,7 @@ static inline void NkListAddBack (NkList_t* list, NkLink_t* item)
 }
 
 // Adds item after item
-static inline void NkListAdd (NkList_t* list, NkLink_t* item, NkLink_t* newItem)
+static FORCEINLINE void NkListAdd (NkList_t* list, NkLink_t* item, NkLink_t* newItem)
 {
     if (item->next)
         item->next->prev = newItem;
@@ -83,7 +84,7 @@ static inline void NkListAdd (NkList_t* list, NkLink_t* item, NkLink_t* newItem)
 }
 
 // Adds item before item
-static inline void NkListAddBefore (NkList_t* list, NkLink_t* item, NkLink_t* newItem)
+static FORCEINLINE void NkListAddBefore (NkList_t* list, NkLink_t* item, NkLink_t* newItem)
 {
     if (item->prev)
         item->prev->next = newItem;
@@ -95,7 +96,7 @@ static inline void NkListAddBefore (NkList_t* list, NkLink_t* item, NkLink_t* ne
 }
 
 // Removes item from list
-static inline void NkListRemove (NkList_t* list, NkLink_t* item)
+static FORCEINLINE void NkListRemove (NkList_t* list, NkLink_t* item)
 {
     if (item->next)
         item->next->prev = item->prev;
@@ -108,7 +109,7 @@ static inline void NkListRemove (NkList_t* list, NkLink_t* item)
 }
 
 // Takes item from front of list
-static inline NkLink_t* NkListPopFront (NkList_t* list)
+static FORCEINLINE NkLink_t* NkListPopFront (NkList_t* list)
 {
     NkLink_t* ret = list->head;
     if (ret)
@@ -123,15 +124,21 @@ static inline NkLink_t* NkListPopFront (NkList_t* list)
 }
 
 // Gets first item in list
-static inline NkLink_t* NkListFront (NkList_t* list)
+static FORCEINLINE NkLink_t* NkListFront (NkList_t* list)
 {
     return list->head;
 }
 
 // Iterates to next item in list
-static inline NkLink_t* NkListIterate (NkLink_t* link)
+static FORCEINLINE NkLink_t* NkListIterate (NkLink_t* link)
 {
     return link->next;
+}
+
+// Initializes a link
+static FORCEINLINE void NkListInitLink (NkLink_t* link)
+{
+    link->next = NULL, link->prev = NULL;
 }
 
 #endif
