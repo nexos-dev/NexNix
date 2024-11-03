@@ -696,27 +696,30 @@ void PltAcpiPcEnable()
         return;
     // Get FADT
     fadt = (AcpiFadt_t*) PltAcpiFindTable ("FACP");
-    // Check if SCI_EN is set
-    if (!(CpuInw (fadt->pm1aCntBlk) & ACPI_SCI_EN))
+    if (!NkReadArg ("-nosci"))
     {
-        CpuOutb (fadt->smiCmd, fadt->acpiEnable);    // Enable ACPI
-        while (CpuInw (fadt->pm1aCntBlk) & ACPI_SCI_EN == 0)
-            ;
-        NkLogDebug ("nexke: enabled ACPI\n");
-    }
-    else
-        NkLogDebug ("nexke: ACPI already enabled\n");
-    // Install SCI handler
-    if (fadt->sciInt && !NkReadArg ("-nosci"))
-    {
-        NkHwInterrupt_t* sciInt = PltAllocHwInterrupt();
-        sciInt->gsi = PltGetGsi (PLT_BUS_ISA, fadt->sciInt);
-        sciInt->mode = PLT_MODE_LEVEL;
-        sciInt->flags = PLT_HWINT_ACTIVE_LOW;
-        sciInt->handler = PltAcpiSciHandler;
-        int vector = PltConnectInterrupt (sciInt);
-        if (vector == -1)
-            NkPanic ("nexke: unable to install SCI");
-        PltInstallInterrupt (vector, sciInt);
+        // Check if SCI_EN is set
+        if (!(CpuInw (fadt->pm1aCntBlk) & ACPI_SCI_EN))
+        {
+            CpuOutb (fadt->smiCmd, fadt->acpiEnable);    // Enable ACPI
+            while (CpuInw (fadt->pm1aCntBlk) & ACPI_SCI_EN == 0)
+                ;
+            NkLogDebug ("nexke: enabled ACPI\n");
+        }
+        else
+            NkLogDebug ("nexke: ACPI already enabled\n");
+        // Install SCI handler
+        if (fadt->sciInt)
+        {
+            NkHwInterrupt_t* sciInt = PltAllocHwInterrupt();
+            sciInt->gsi = PltGetGsi (PLT_BUS_ISA, fadt->sciInt);
+            sciInt->mode = PLT_MODE_LEVEL;
+            sciInt->flags = PLT_HWINT_ACTIVE_LOW;
+            sciInt->handler = PltAcpiSciHandler;
+            int vector = PltConnectInterrupt (sciInt);
+            if (vector == -1)
+                NkPanic ("nexke: unable to install SCI");
+            PltInstallInterrupt (vector, sciInt);
+        }
     }
 }

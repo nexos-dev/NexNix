@@ -73,7 +73,7 @@ void NbCpuAsInit()
 
 static pte_t* cpuAsAllocTab (pde_t* pdir, uintptr_t virt, uint64_t flags)
 {
-    pte_t* tab = (pte_t*) NbFwAllocPersistPageNoMap();
+    pte_t* tab = (pte_t*) NbFwAllocPersistentPage();
     if (!tab)
         return NULL;
     memset (tab, 0, NEXBOOT_CPU_PAGE_SIZE);
@@ -90,7 +90,7 @@ static pte_t* cpuAsAllocTab (pde_t* pdir, uintptr_t virt, uint64_t flags)
 
 static pde_t* cpuAsAllocDir (uintptr_t virt)
 {
-    pde_t* dir = (pde_t*) NbFwAllocPersistPageNoMap();
+    pde_t* dir = (pde_t*) NbFwAllocPersistentPage();
     if (!dir)
         return NULL;
     memset (dir, 0, NEXBOOT_CPU_PAGE_SIZE);

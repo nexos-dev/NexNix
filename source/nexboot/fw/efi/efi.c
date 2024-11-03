@@ -39,7 +39,8 @@ uintptr_t NbFwAllocPage()
     EFI_PHYSICAL_ADDRESS addr = 0;
     if (BS->AllocatePages (AllocateAnyPages, EfiLoaderData, 1, &addr) != EFI_SUCCESS)
     {
-        return 0;
+        NbLogMessage ("nexboot: out of memory", NEXBOOT_LOGLEVEL_EMERGENCY);
+        NbCrash();
     }
     memset ((void*) addr, 0, NEXBOOT_CPU_PAGE_SIZE);
     return addr;
@@ -51,7 +52,8 @@ uintptr_t NbFwAllocPages (int count)
     EFI_PHYSICAL_ADDRESS addr = 0;
     if (BS->AllocatePages (AllocateAnyPages, EfiLoaderData, count, &addr) != EFI_SUCCESS)
     {
-        return 0;
+        NbLogMessage ("nexboot: out of memory", NEXBOOT_LOGLEVEL_EMERGENCY);
+        NbCrash();
     }
     memset ((void*) addr, 0, count * NEXBOOT_CPU_PAGE_SIZE);
     return addr;
@@ -62,15 +64,11 @@ uintptr_t NbFwAllocPersistentPage()
     EFI_PHYSICAL_ADDRESS addr = 0;
     if (BS->AllocatePages (AllocateAnyPages, EfiRuntimeServicesData, 1, &addr) != EFI_SUCCESS)
     {
-        return 0;
+        NbLogMessage ("nexboot: out of memory", NEXBOOT_LOGLEVEL_EMERGENCY);
+        NbCrash();
     }
     memset ((void*) addr, 0, NEXBOOT_CPU_PAGE_SIZE);
     return addr;
-}
-
-uintptr_t NbFwAllocPersistPageNoMap()
-{
-    return NbFwAllocPersistentPage();    // Same as with map on EFI
 }
 
 // Allocates pages that will persist after bootloader
@@ -79,7 +77,8 @@ uintptr_t NbFwAllocPersistentPages (int count)
     EFI_PHYSICAL_ADDRESS addr = 0;
     if (BS->AllocatePages (AllocateAnyPages, EfiRuntimeServicesData, count, &addr) != EFI_SUCCESS)
     {
-        return 0;
+        NbLogMessage ("nexboot: out of memory", NEXBOOT_LOGLEVEL_EMERGENCY);
+        NbCrash();
     }
     memset ((void*) addr, 0, count * NEXBOOT_CPU_PAGE_SIZE);
     return addr;

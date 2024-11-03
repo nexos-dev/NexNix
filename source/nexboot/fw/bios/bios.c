@@ -62,8 +62,8 @@ uintptr_t NbFwAllocPage()
     curMemLocation += NEXBOOT_CPU_PAGE_SIZE;
     if (curMemLocation >= NEXBOOT_BIOS_BASE)
     {
-        curMemLocation -= NEXBOOT_CPU_PAGE_SIZE;
-        return 0;
+        NbLogMessage ("nexboot: out of memory", NEXBOOT_LOGLEVEL_EMERGENCY);
+        NbCrash();
     }
     memset ((void*) ret, 0, NEXBOOT_CPU_PAGE_SIZE);
     return ret;
@@ -75,8 +75,8 @@ uintptr_t NbFwAllocPages (int count)
     curMemLocation += (NEXBOOT_CPU_PAGE_SIZE * count);
     if (curMemLocation >= NEXBOOT_BIOS_BASE)
     {
-        curMemLocation -= (NEXBOOT_CPU_PAGE_SIZE * count);
-        return 0;
+        NbLogMessage ("nexboot: out of memory", NEXBOOT_LOGLEVEL_EMERGENCY);
+        NbCrash();
     }
     memset ((void*) ret, 0, (NEXBOOT_CPU_PAGE_SIZE * count));
     return ret;
@@ -88,15 +88,11 @@ uintptr_t NbFwAllocPersistentPage()
 {
     uintptr_t ret = curOffset + NEXBOOT_BIOS_END;
     curOffset += NEXBOOT_CPU_PAGE_SIZE;
-    // Map it
-    NbCpuAsMap (ret, ret, NB_CPU_AS_RW);
-    return ret;
-}
-
-uintptr_t NbFwAllocPersistPageNoMap()
-{
-    uintptr_t ret = curOffset + NEXBOOT_BIOS_END;
-    curOffset += NEXBOOT_CPU_PAGE_SIZE;
+    if (curOffset >= NEXBOOT_BIOS_BACKBUF)
+    {
+        NbLogMessage ("nexboot: out of memory", NEXBOOT_LOGLEVEL_EMERGENCY);
+        NbCrash();
+    }
     return ret;
 }
 
@@ -104,12 +100,10 @@ uintptr_t NbFwAllocPersistentPages (int count)
 {
     uintptr_t ret = curOffset + NEXBOOT_BIOS_END;
     curOffset += (count * NEXBOOT_CPU_PAGE_SIZE);
-    for (int i = 0; i < count; ++i)
+    if (curOffset >= NEXBOOT_BIOS_BACKBUF)
     {
-        // Map it
-        NbCpuAsMap (ret + (i * NEXBOOT_CPU_PAGE_SIZE),
-                    ret + (i * NEXBOOT_CPU_PAGE_SIZE),
-                    NB_CPU_AS_RW);
+        NbLogMessage ("nexboot: out of memory", NEXBOOT_LOGLEVEL_EMERGENCY);
+        NbCrash();
     }
     return ret;
 }

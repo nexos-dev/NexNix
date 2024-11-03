@@ -98,8 +98,8 @@ bool NbFwResvMem (uintptr_t base, size_t sz, int type);
 // Memory constants
 #define NEXBOOT_BIOS_MEMBASE 0x100000
 #define NEXBOOT_BIOS_BASE    0x200000
-#define NEXBOOT_BIOS_END     0x400000
-#define NEXBOOT_BIOS_BACKBUF 0x600000
+#define NEXBOOT_BIOS_END     0x300000
+#define NEXBOOT_BIOS_BACKBUF 0x800000
 
 #define NEXBOOT_BIOSBUF_BASE  0x7000
 #define NEXBOOT_BIOSBUF2_BASE 0x8000

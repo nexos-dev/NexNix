@@ -58,7 +58,7 @@ void NbCpuAsInit()
     pdir = (pde_t*) NbReadCr3();
     if (!pdir)
     {
-        pdir = (pde_t*) NbFwAllocPersistPageNoMap();
+        pdir = (pde_t*) NbFwAllocPersistentPage();
         isPgOn = false;
     }
     // Disable WP. We only do this because some not smart UEFIs
@@ -72,7 +72,7 @@ void NbCpuAsInit()
 
 static pte_t* cpuAsAllocTab (uintptr_t virt, uint32_t flags)
 {
-    pte_t* tab = (pte_t*) NbFwAllocPersistPageNoMap();
+    pte_t* tab = (pte_t*) NbFwAllocPersistentPage();
     if (!tab)
         return NULL;
     memset (tab, 0, NEXBOOT_CPU_PAGE_SIZE);

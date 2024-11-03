@@ -26,7 +26,7 @@ int CpuGetEl()
 // Disables interrupts
 void CpuDisable()
 {
-    CpuWriteSpr ("daif", CPU_ARMV8_D | CPU_ARMV8_A | CPU_ARMV8_I | CPU_ARMV8_F);
+    CpuWriteSpr ("daif", CPU_ARMV8_INT_D | CPU_ARMV8_INT_A | CPU_ARMV8_INT_I | CPU_ARMV8_INT_F);
 }
 
 // Enables interrupts
@@ -51,4 +51,9 @@ void CpuUnholdInts()
         CpuWriteSpr ("daif", 0);
         CpuGetCcb()->archCcb.intReq = false;
     }
+}
+
+void CpuHalt()
+{
+    asm ("wfi");
 }

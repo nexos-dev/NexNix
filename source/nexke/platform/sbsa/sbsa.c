@@ -1,5 +1,5 @@
 /*
-    sbsa.c - contains platform - specific components of nexke
+    sbsa.c - contains SBSA components of nexke
     Copyright 2024 The NexNix Project
 
     Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,10 +15,10 @@
     limitations under the License.
 */
 
-#include "sbsa.h"
 #include <nexke/nexboot.h>
 #include <nexke/nexke.h>
 #include <nexke/platform.h>
+#include <nexke/platform/sbsa.h>
 
 // Console struct externs
 extern NkConsole_t fbCons;
@@ -41,7 +41,8 @@ void PltInitDrvs()
     {
         // This is not an SBSA / EBBR compliant system.
         // Just crash
-        primaryCons->write ("nexke: fatal error: system doesn't support ACPI");
+        if (primaryCons)
+            primaryCons->write ("nexke: fatal error: system doesn't support ACPI");
         CpuCrash();
     }
     // Get DBG2 table to find serial port

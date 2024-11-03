@@ -118,7 +118,7 @@ static inline pmle_t* cpuAsGetEntry (pmle_t* curTab, uintptr_t addr, int level)
 // Allocates paging structure and puts it in specified level
 static pmle_t* cpuAsAllocSt (pmle_t* curSt, uintptr_t addr, int level, uint64_t flags)
 {
-    pmle_t* newSt = (pmle_t*) NbFwAllocPersistPageNoMap();
+    pmle_t* newSt = (pmle_t*) NbFwAllocPersistentPage();
     if (!newSt)
         return NULL;
     memset (newSt, 0, NEXBOOT_CPU_PAGE_SIZE);

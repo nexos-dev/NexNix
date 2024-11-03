@@ -223,8 +223,6 @@ static void PltHpetSetCb (void (*cb)())
     pltHpetTimer.callback = cb;
 }
 
-#define PLT_HPET_ARM_DELAY 20000
-
 // Called by us if arming skipped the deadline
 extern void NkTimeHandler();
 

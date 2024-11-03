@@ -18,6 +18,9 @@
 #ifndef _ARMV8_H
 #define _ARMV8_H
 
+#define MM_PAGE_TABLES
+
+#include <nexke/cpu/armv8/mul.h>
 #include <stdbool.h>
 #include <stdint.h>
 
@@ -69,22 +72,99 @@ void __attribute__ ((noreturn)) CpuCrash();
 
 #define CpuWriteSpr(spr, val) asm volatile ("msr " spr ", %0" : : "r"(val));
 
+#define CpuSpin() asm volatile ("yield")
+
 // Gets current exception level
 int CpuGetEl();
-
-// Hint to CPU we are spinning
-void CpuSpin();
 
 // DAIF helpers
 #define CPU_ARMV8_INT_D (1 << 9)
 #define CPU_ARMV8_INT_A (1 << 8)
 #define CPU_ARMV8_INT_I (1 << 7)
-#define CPU_ARMV8_INF_F (1 << 6)
+#define CPU_ARMV8_INT_F (1 << 6)
 
 // CPU data structures
 typedef struct _cputhread
 {
 
 } CpuThread_t;
+
+typedef struct _cpuint
+{
+
+} CpuIntContext_t;
+
+typedef struct _cpuctx
+{
+
+} CpuContext_t;
+
+// Stubs of I/O port functions as they are referenced in some modules
+// but invalid on ARMv8
+
+void __attribute__ ((noreturn)) NkPanic (const char* fmt, ...);
+
+static inline uint8_t CpuInb (uint16_t port)
+{
+    NkPanic ("Attempt to use PC I/O on ARM!");
+    return 0;
+}
+
+static inline uint16_t CpuInw (uint16_t port)
+{
+    NkPanic ("Attempt to use PC I/O on ARM!");
+    return 0;
+}
+
+static inline uint32_t CpuInl (uint16_t port)
+{
+    NkPanic ("Attempt to use PC I/O on ARM!");
+    return 0;
+}
+
+static inline void CpuOutb (uint16_t port, uint8_t val)
+{
+    NkPanic ("Attempt to use PC I/O on ARM!");
+}
+
+static inline void CpuOutw (uint16_t port, uint16_t val)
+{
+    NkPanic ("Attempt to use PC I/O on ARM!");
+}
+
+static inline void CpuOutl (uint16_t port, uint32_t val)
+{
+    NkPanic ("Attempt to use PC I/O on ARM!");
+}
+
+// Interrupt stuff
+#define NK_MAX_INTS \
+    256    // Technically this is arbitary. ARM only has a couple of interrupt vectors
+           // and we have to figure out the table index based on the ARM vector
+#define CPU_BASE_HWINT 16
+
+// Vector table
+extern uint8_t CpuVectorTable[];
+
+// Vector offsets
+#define CPU_ARMV8_EXEC_SP_EL0     0
+#define CPU_ARMV8_EXEC_SP_ELX     0x200
+#define CPU_ARMV8_EXEC_LOWER_EL   0x400
+#define CPU_ARMV8_EXEC_LOWER_EL32 0x600
+
+#define CPU_ARMV8_IRQ_SP_EL0     0x80
+#define CPU_ARMV8_IRQ_SP_ELX     0x280
+#define CPU_ARMV8_IRQ_LOWER_EL   0x480
+#define CPU_ARMV8_IRQ_LOWER_EL32 0x680
+
+#define CPU_ARMV8_FIQ_SP_EL0     0x100
+#define CPU_ARMV8_FIQ_SP_ELX     0x300
+#define CPU_ARMV8_FIQ_LOWER_EL   0x500
+#define CPU_ARMV8_FIQ_LOWER_EL32 0x700
+
+#define CPU_ARMV8_SERR_SP_EL0     0x180
+#define CPU_ARMV8_SERR_SP_ELX     0x380
+#define CPU_ARMV8_SERR_LOWER_EL   0x580
+#define CPU_ARMV8_SERR_LOWER_EL32 0x780
 
 #endif

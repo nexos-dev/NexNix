@@ -111,7 +111,7 @@ void CpuDestroyContext (CpuContext_t* context);
     if (CpuRealCcb()->intActive) \
         NkPanic ("nexke: interrupt check failed\n");
 #else
-#define CPU_ASSERT_NO_INT()
+#define CPU_ASSERT_NOT_INT()
 #endif
 
 #define CPU_IS_INT() (CpuRealCcb()->intActive)

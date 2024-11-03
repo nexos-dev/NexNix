@@ -1,5 +1,5 @@
 /*
-    mul.h - contains MUL header
+    mul.h - contains MUL implementation
     Copyright 2024 The NexNix Project
 
     Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,7 +15,6 @@
     limitations under the License.
 */
 
-#include "mul.h"
 #include <nexke/cpu.h>
 #include <nexke/mm.h>
 #include <nexke/nexke.h>

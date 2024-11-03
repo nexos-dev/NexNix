@@ -15,10 +15,10 @@
     limitations under the License.
 */
 
-#include "sbsa.h"
 #include <nexke/mm.h>
 #include <nexke/nexke.h>
 #include <nexke/platform.h>
+#include <nexke/platform/sbsa.h>
 #include <stdlib.h>
 
 // Register offsets
@@ -135,18 +135,22 @@ bool PltPL011Init (AcpiGas_t* gas)
     // We now have the clock rate, we must now setup the registers
     // Disable for now
     pl011WriteReg (PL011_CR, pl011ReadReg (PL011_CR) & ~(PL011_CR_UARTEN));
-    // Determine baud rate
-    int divisor = 0;
-    const char* baudArg = NkReadArg ("-baud");
-    if (baudArg && *baudArg)
-        divisor = clock / (atoi (baudArg) * 4);
-    else
-        divisor = clock / PL011_DEFAULT_BAUDRATE;
-    // Split up into fractional and integer parts
-    uint32_t idiv = (divisor >> 6) & 0xFFFF;
-    uint32_t fdiv = divisor & 0x3F;
-    pl011WriteReg (PL011_IBRD, idiv);
-    pl011WriteReg (PL011_FBRD, fdiv);
+    // Determine if we should set the divisor
+    if (clock)
+    {
+        // Determine baud rate
+        int divisor = 0;
+        const char* baudArg = NkReadArg ("-baud");
+        if (baudArg && *baudArg)
+            divisor = clock / (atoi (baudArg) * 4);
+        else
+            divisor = clock / PL011_DEFAULT_BAUDRATE;
+        // Split up into fractional and integer parts
+        uint32_t idiv = (divisor >> 6) & 0xFFFF;
+        uint32_t fdiv = divisor & 0x3F;
+        pl011WriteReg (PL011_IBRD, idiv);
+        pl011WriteReg (PL011_FBRD, fdiv);
+    }
     // Set up LCR
     pl011WriteReg (PL011_LCR, PL011_LCR_8BITS);
     // Set CR

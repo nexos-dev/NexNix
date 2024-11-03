@@ -124,9 +124,9 @@ void NbCpuAsInit()
         NbCrash();
     }
     // Set up paging structure
-    pgBase = (pte_t*) NbFwAllocPersistPageNoMap();
+    pgBase = (pte_t*) NbFwAllocPersistentPage();
     assert (pgBase);
-    pgBase2 = (pte_t*) NbFwAllocPersistPageNoMap();
+    pgBase2 = (pte_t*) NbFwAllocPersistentPage();
     assert (pgBase2);
 }
 
@@ -140,7 +140,7 @@ static inline pte_t* cpuAsGetEntry (pte_t* curTab, uintptr_t addr, int level)
 // Allocates paging structure and puts it in specified level
 static pte_t* cpuAsAllocSt (pte_t* curSt, uintptr_t addr, int level)
 {
-    pte_t* newSt = (pte_t*) NbFwAllocPersistPageNoMap();
+    pte_t* newSt = (pte_t*) NbFwAllocPersistentPage();
     if (!newSt)
         return NULL;
     memset (newSt, 0, NEXBOOT_CPU_PAGE_SIZE);
