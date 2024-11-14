@@ -156,6 +156,8 @@ static void NkInitialThread (void*)
     TskStartThread (thread);
     TskWaitQueueTimeout (&queue, 50000);
     NkLogDebug ("got here 2\n");
+    uintptr_t virt = MmAllocKvRegion (2, MM_KV_NO_DEMAND);
+    MmMulUnmapRange (MmGetKernelSpace(), virt, 4);
     for (;;)
         ;
 }

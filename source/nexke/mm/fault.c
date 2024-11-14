@@ -51,7 +51,6 @@ bool MmPageFault (uintptr_t vaddr, int prot)
     }
     // Add this page to MUL
     MmMulMapPage (space, vaddr, outPage, prot);
-    NkSpinUnlock (&outPage->lock);
     NkSpinUnlock (&obj->lock);
     return true;
 }
@@ -74,6 +73,9 @@ bool MmPageFaultIn (MmObject_t* obj, size_t offset, int* prot, MmPage_t** outPag
         if (!page)
             NkPanicOom();
         NkSpinLock (&page->lock);
+        // Check if this page should be fixed
+        if (obj->backend == MM_BACKEND_KERNEL)
+            MmFixPage (page);
         MmAddPage (obj, offset, page);
         if (!MmBackendPageIn (obj, offset, page))
             NkPanic ("nexke: page in error\n");
@@ -88,6 +90,7 @@ bool MmPageFaultIn (MmObject_t* obj, size_t offset, int* prot, MmPage_t** outPag
         if (page->flags & MM_PAGE_GUARD)
         {
             NkLogDebug ("nexke: guard page access caught\n");
+            NkSpinUnlock (&page->lock);
             return false;
         }
     }
@@ -99,7 +102,10 @@ bool MmPageFaultIn (MmObject_t* obj, size_t offset, int* prot, MmPage_t** outPag
         // Set flags and page and return because we were successful
         *prot = obj->perm;
         *outPage = page;
+        NkSpinUnlock (&page->lock);
         return true;
     }
+    if (page)
+        NkSpinUnlock (&page->lock);
     return false;
 }

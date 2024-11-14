@@ -33,13 +33,32 @@ typedef uint64_t pte_t;
 #define PF_A                   (1ULL << 5)
 #define PF_D                   (1ULL << 6)
 #define PF_PS                  (1ULL << 7)
-#define PF_PAT                 (1ULL << 7)
+#define PF_WC                  (1ULL << 7)
 #define PF_G                   (1ULL << 8)
-#define PF_PSPAT               (1ULL << 12)
+#define PF_F                   (1ULL << 10)    // Indicates that a page is fixed
+#define PF_PSWC                (1ULL << 12)
 #define PF_NX                  (1ULL << 63)
 #define PT_FRAME               0x7FFFFFFFFFFFF000
 #define PT_GETFRAME(pt)        ((pt) & (PT_FRAME))
 #define PT_SETFRAME(pt, frame) ((pt) |= ((frame) & (PT_FRAME)))
+
+// PAT stuff
+#define MUL_PAT_MSR 0x277
+
+#define MUL_PAT_UC      0
+#define MUL_PAT_WC      1
+#define MUL_PAT_WT      4
+#define MUL_PAT_WB      6
+#define MUL_PAT_UCMINUS 7
+
+#define MUL_PAT0 0ULL
+#define MUL_PAT1 8ULL
+#define MUL_PAT2 16ULL
+#define MUL_PAT3 24ULL
+#define MUL_PAT4 32ULL
+#define MUL_PAT5 40ULL
+#define MUL_PAT6 48ULL
+#define MUL_PAT7 56ULL
 
 // Virtual address manipulating macros
 // Shift table for each level
@@ -68,7 +87,7 @@ static bool idxPrioTable[] = {false, false, false, true, true, true};
 #endif
 
 // PT cache defines
-#define MUL_MAX_PTCACHE        128
+#define MUL_MAX_PTCACHE        85
 #define MUL_PTCACHE_BASE       0xFFFFFFFF00200000
 #define MUL_PTCACHE_TABLE_BASE 0xFFFFFFFF00001000
 #define MUL_PTCACHE_ENTRY_BASE 0xFFFFFFFF00000000
@@ -107,5 +126,8 @@ typedef struct _memspace MmSpace_t;
 
 // Allocates page table into ent
 paddr_t MmMulAllocTable (MmSpace_t* space, uintptr_t addr, pte_t* stBase, pte_t* ent);
+
+// Checks if address is a kernel address
+#define MmMulIsKernel(addr) ((addr) >= NEXKE_KERNEL_BASE)
 
 #endif

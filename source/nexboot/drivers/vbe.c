@@ -574,22 +574,6 @@ static bool VbeObjSetRender (void* objp, void* params)
 
 static bool VbeObjUnmapFb (void* objp, void* params)
 {
-    NbLogMessage ("nexboot: mapping framebuffer to %#lX\n",
-                  NEXBOOT_LOGLEVEL_DEBUG,
-                  NEXBOOT_FB_BASE);
-    NbObject_t* obj = objp;
-    NbDisplayDev_t* display = NbObjGetData (obj);
-    size_t lfbPages = (display->lfbSize + (NEXBOOT_CPU_PAGE_SIZE - 1)) / NEXBOOT_CPU_PAGE_SIZE;
-    for (int i = 0; i < lfbPages; ++i)
-    {
-        NbCpuAsUnmap ((uintptr_t) display->frontBuffer + (i * NEXBOOT_CPU_PAGE_SIZE));
-        // Map framebuffer to new address
-        NbCpuAsMap ((uintptr_t) NEXBOOT_FB_BASE + (i * NEXBOOT_CPU_PAGE_SIZE),
-                    (uintptr_t) display->frontBuffer + (i * NEXBOOT_CPU_PAGE_SIZE),
-                    NB_CPU_AS_RW | NB_CPU_AS_WT);
-        // NbCpuAsUnmap ((uintptr_t) display->backBuffer + (i * NEXBOOT_CPU_PAGE_SIZE));
-    }
-    display->frontBuffer = (void*) NEXBOOT_FB_BASE;
     return true;
 }
 

@@ -33,6 +33,8 @@
 
 // Initializes FB console
 void NkFbConsInit();
+// Remaps framebuffer to WC
+void NkFbConsFbRemap();
 
 // Argument processing
 
@@ -264,5 +266,19 @@ bool NkWorkQueueCancel (NkWorkQueue_t* queue, NkWorkItem_t* item);
 
 // Initializes worker system
 void NkInitWorkQueue();
+
+// Aligning inlines
+static inline uintptr_t NkAlignUp (uintptr_t ptr, uintptr_t align)
+{
+    // Clear low bits and round to align
+    ptr &= ~(align - 1);
+    ptr += align;
+    return ptr;
+}
+
+static inline uintptr_t NkAlignDown (uintptr_t ptr, uintptr_t align)
+{
+    return ptr & ~(align - 1);
+}
 
 #endif

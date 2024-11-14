@@ -98,9 +98,10 @@ typedef struct _page
     pfn_t pfn;            // PFN of this page
     MmZone_t* zone;       // Zone this page resides in
     int flags;            // Flags of this page
+    int fixCount;         // Number of maps that have fixed this page
     MmObject_t* obj;      // Object that owns this page
     size_t offset;        // Offset in object. Used for page lookup
-    MmPageMap_t* maps;    // Mappings of this page
+    MmPageMap_t* maps;    // Mappings on this page
     NkLink_t link;        // Link to track this page on free list/hash table
     NkLink_t objLink;     // Link to track this page in object
     spinlock_t lock;      // Lock on page structure
@@ -111,12 +112,16 @@ typedef struct _page
 #define MM_PAGE_UNUSABLE  (1 << 2)    // Page is not usable
 #define MM_PAGE_ALLOCED   (1 << 3)    // Page is allocated but not in object
 #define MM_PAGE_GUARD     (1 << 4)    // Page is a guard page
+#define MM_PAGE_FIXED     (1 << 5)    // Page is fixed in it's mapping and in memory
 
 // Page interface
 
 // Allocates an MmPage, with specified characteristics
 // Returns NULL if physical memory is exhausted
 MmPage_t* MmAllocPage();
+
+// Allocates a fixed page
+MmPage_t* MmAllocFixedPage();
 
 // Finds page at specified PFN, and removes it from free list
 // If PFN is non-existant, or if PFN is in reserved memory region, returns PFN
@@ -126,6 +131,12 @@ MmPage_t* MmFindPagePfn (pfn_t pfn);
 
 // Frees a page
 void MmFreePage (MmPage_t* page);
+
+// Fixes a page in memory
+void MmFixPage (MmPage_t* page);
+
+// Un-fixes a page from memory
+void MmUnfixPage (MmPage_t* page);
 
 // Allocate a guard page
 // Guard pages have no PFN, they are fake pages that indicate to
@@ -143,16 +154,16 @@ void MmFreePages (MmPage_t* pages, size_t count);
 
 // Page hash management interface
 
-// Number of buckets for the hash table
-#define MM_MAX_BUCKETS 1024
-
 // Adds a page to a page hash list
+// Page and object must be locked
 void MmAddPage (MmObject_t* obj, size_t off, MmPage_t* page);
 
 // Looks up page in page list, returning NULL if none is found
+// Object should be locked
 MmPage_t* MmLookupPage (MmObject_t* obj, size_t off);
 
 // Removes a page from the hash list
+// Page must be locked
 void MmRemovePage (MmPage_t* page);
 
 // Misc. page functions
@@ -235,6 +246,13 @@ typedef struct _mementry
     struct _mementry* prev;    // Last entry
 } MmSpaceEntry_t;
 
+// MUL stats
+typedef struct _mmmulstats
+{
+    int numMaps;
+    int numFixed;
+} MmMulStats_t;
+
 typedef struct _memspace
 {
     uintptr_t startAddr;          // Address the address space starts at
@@ -243,6 +261,7 @@ typedef struct _memspace
     MmSpaceEntry_t* entryList;    // List of address space entries
     MmSpaceEntry_t* faultHint;    // Last faulting area
     MmMulSpace_t mulSpace;        // MUL address space
+    MmMulStats_t stats;           // MUL stats
     spinlock_t lock;              // Lock on address space
 } MmSpace_t;
 
@@ -305,6 +324,7 @@ bool MmPageFaultIn (MmObject_t* obj, size_t offset, int* prot, MmPage_t** page);
 #define MUL_PAGE_CD (1 << 4)
 #define MUL_PAGE_WT (1 << 5)
 #define MUL_PAGE_P  (1 << 6)
+#define MUL_PAGE_WC (1 << 7)
 
 // Initializes MUL
 void MmMulInit();
@@ -318,11 +338,25 @@ uintptr_t MmMulGetPhysEarly (uintptr_t virt);
 // Maps page into address space
 void MmMulMapPage (MmSpace_t* space, uintptr_t virt, MmPage_t* page, int perm);
 
-// Unmaps page out of address space
-void MmMulUnmapPage (MmSpace_t* space, uintptr_t virt);
+// Unmaps a page and removes all its mappings
+void MmMulUnmapPage (MmPage_t* page);
 
-// Changes protection for a mapping
-void MmMulChangePerm (MmSpace_t* space, uintptr_t virt, int perm);
+// Changes protection on a page
+void MmMulProtectPage (MmPage_t* page, int perm);
+
+// Unmaps a range out of an address space
+void MmMulUnmapRange (MmSpace_t* space, uintptr_t base, size_t count);
+
+// Changes protection on range of address space
+void MmMulProtectRange (MmSpace_t* space, uintptr_t base, size_t count, int perm);
+
+// Fixes a page in an address space
+// Page must be locked
+void MmMulFixPage (MmPage_t* page);
+
+// Unfixes a page
+// Page must be locked
+void MmMulUnfixPage (MmPage_t* page);
 
 // Gets mapping for specified virtual address
 MmPage_t* MmMulGetMapping (MmSpace_t* space, uintptr_t virt);
@@ -333,21 +367,18 @@ void MmMulZeroPage (MmPage_t* page);
 // Creates an MUL address space
 void MmMulCreateSpace (MmSpace_t* space);
 
-// Destroys an MUL address space
-void MmMulDestroySpace (MmSpace_t* space);
+// References an MUL address space
+void MmMulRefSpace (MmSpace_t* space);
+
+// Destroys an MUL address space reference
+void MmMulDeRefSpace (MmSpace_t* space);
 
 // Page mapping management
 typedef struct _mmpgmap
 {
     MmSpace_t* space;         // Address space this mapping resides in
     uintptr_t addr;           // Address of mapping in address space
-    struct _mmpgmap* next;    // Pointer for list
+    struct _mmpgmap* next;    // Link
 } MmPageMap_t;
-
-// Adds mapping to page
-void MmPageAddMap (MmPage_t* page, MmSpace_t* space, uintptr_t addr);
-
-// Clears mappings from page
-void MmPageClearMaps (MmPage_t* page);
 
 #endif

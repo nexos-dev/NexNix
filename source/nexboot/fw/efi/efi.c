@@ -251,13 +251,6 @@ bool NbEfiCompareDevicePath (EFI_DEVICE_PATH* dev1, EFI_DEVICE_PATH* dev2)
     return !memcmp (dev1, dev2, (size > size2) ? size : size2);
 }
 
-// Standard framebuffer VA base
-#ifdef NEXNIX_ARCH_I386
-#define NB_EFI_FB_BASE 0xF0000000
-#else
-#define NB_EFI_FB_BASE 0xFFFFFFFFF0000000
-#endif
-
 // Map in memory regions to address space
 void NbFwMapRegions (NbMemEntry_t* memMap, size_t mapSz)
 {
@@ -292,22 +285,6 @@ void NbFwMapRegions (NbMemEntry_t* memMap, size_t mapSz)
             foundDisplay = true;
             break;
         }
-    }
-    if (foundDisplay)
-    {
-        NbLogMessage ("nexboot: mapping framebuffer to %#lX\n",
-                      NEXBOOT_LOGLEVEL_DEBUG,
-                      NB_EFI_FB_BASE);
-        NbDisplayDev_t* display = NbObjGetData (iter);
-        size_t lfbPages = (display->lfbSize + (NEXBOOT_CPU_PAGE_SIZE - 1)) / NEXBOOT_CPU_PAGE_SIZE;
-        for (int i = 0; i < lfbPages; ++i)
-        {
-            NbCpuAsMap (NB_EFI_FB_BASE + (i * NEXBOOT_CPU_PAGE_SIZE),
-                        (uintptr_t) display->frontBuffer + (i * NEXBOOT_CPU_PAGE_SIZE),
-                        NB_CPU_AS_RW | NB_CPU_AS_WT);
-        }
-        // Ensure display structure points here
-        display->frontBuffer = (void*) NB_EFI_FB_BASE;
     }
 }
 

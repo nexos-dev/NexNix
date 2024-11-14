@@ -17,6 +17,7 @@
 
 #include <assert.h>
 #include <nexke/cpu.h>
+#include <nexke/cpu/ptab.h>
 #include <nexke/mm.h>
 #include <nexke/nexke.h>
 #include <string.h>
@@ -35,8 +36,8 @@ void MmPtabInit (int numLevels)
     mmNumLevels = numLevels;
 }
 
-// Walks to a page table entry and maps specfied value into it
-void MmPtabWalkAndMap (MmSpace_t* space, paddr_t as, uintptr_t vaddr, pte_t pteVal)
+// Walks to a page table entry and creates page tables for ita
+MmPtCacheEnt_t* MmPtabWalkAndMap (MmSpace_t* space, paddr_t as, uintptr_t vaddr, pte_t pte)
 {
     // Grab base and cache it
     MmPtCacheEnt_t* cacheEnt = MmPtabGetCache (as, mmNumLevels);
@@ -48,7 +49,7 @@ void MmPtabWalkAndMap (MmSpace_t* space, paddr_t as, uintptr_t vaddr, pte_t pteV
         {
             // Verify validity of this table for mapping this page
             // Failure results in panic
-            MmMulVerify (*ent, pteVal);
+            MmMulVerify (*ent, pte);
             // Grab cache entry
             cacheEnt = MmPtabSwapCache (PT_GETFRAME (*ent), cacheEnt, i - 1);
         }
@@ -60,17 +61,12 @@ void MmPtabWalkAndMap (MmSpace_t* space, paddr_t as, uintptr_t vaddr, pte_t pteV
             cacheEnt = MmPtabSwapCache (newTab, cacheEnt, i - 1);
         }
     }
-    // Map last entry
-    pte_t* lastSt = (pte_t*) cacheEnt->addr;
-    pte_t* lastEnt = &lastSt[MUL_IDX_LEVEL (vaddr, 1)];
-    // Map it
-    *lastEnt = pteVal;
-    // Return cache entry
-    MmPtabReturnCache (cacheEnt);
+    // Returns last entry
+    return cacheEnt;
 }
 
 // Walks to a pte and returns a cache entry
-static MmPtCacheEnt_t* mmPtabWalk (MmSpace_t* space, paddr_t as, uintptr_t vaddr)
+MmPtCacheEnt_t* MmPtabWalk (MmSpace_t* space, paddr_t as, uintptr_t vaddr)
 {
     // Grab base and cache it
     MmPtCacheEnt_t* cacheEnt = MmPtabGetCache (as, mmNumLevels);
@@ -86,49 +82,62 @@ static MmPtCacheEnt_t* mmPtabWalk (MmSpace_t* space, paddr_t as, uintptr_t vaddr
         else
         {
             // Table doesn't exist, panic
-            NkPanic ("nexke: error: attempting to unmap invalid mapping");
+            NkPanic ("nexke: error: attempting to walk to invalid mapping");
         }
     }
     return cacheEnt;
 }
 
-// Walks to a page table entry and unmaps it
-void MmPtabWalkAndUnmap (MmSpace_t* space, paddr_t as, uintptr_t vaddr)
+// Iterates over PTEs in address space
+MmPtCacheEnt_t* MmPtabIterate (MmPtIter_t* iter)
 {
-    // Grab mapping
-    MmPtCacheEnt_t* cacheEnt = mmPtabWalk (space, as, vaddr);
-    // Map last entry
-    pte_t* lastSt = (pte_t*) cacheEnt->addr;
-    pte_t* lastEnt = &lastSt[MUL_IDX_LEVEL (vaddr, 1)];
-    // Unmap it
-    *lastEnt = 0;
-    // Return cache entry
-    MmPtabReturnCache (cacheEnt);
+    // Cache address space
+    if (!iter->asCache)
+        iter->asCache = MmPtabGetCache (iter->asPhys, mmNumLevels);
+    // Now get all other appropriate cache entries
+    MmPtCacheEnt_t* cacheEnt = iter->asCache;
+    uintptr_t addr = iter->addr;
+    for (int i = mmNumLevels; i > 1; --i)
+    {
+        // Get next table
+        MmPtIterTable_t* table = &iter->ptIters[i - 1];
+        // Set current PTE in table
+        table->curPte = MUL_IDX_LEVEL (addr, i - 1);
+        // Check if it needs to be cached
+        // This is true if we dont have a pre-existing cache entry or the current PTE goes to zero
+        if (!table->cacheEnt || table->curPte == 0)
+        {
+            // Return existing cache entry
+            if (table->cacheEnt)
+                MmPtabReturnCache (table->cacheEnt);
+            // Get new table address
+            pte_t* curSt = (pte_t*) cacheEnt->addr;
+            pte_t* ent = &curSt[MUL_IDX_LEVEL (addr, i)];
+            if (!*ent)
+            {
+                // Return NULL as PTE doesn't exist
+                iter->addr += NEXKE_CPU_PAGESZ;
+                return NULL;
+            }
+            // Cache it
+            table->cacheEnt = MmPtabGetCache (PT_GETFRAME (*ent), i - 1);
+        }
+        cacheEnt = table->cacheEnt;
+    }
+    iter->addr += NEXKE_CPU_PAGESZ;    // To next page
+    return cacheEnt;                   // Return the current cache entry
 }
 
-// Walks to a page table entry and changes its protection
-void MmPtabWalkAndChange (MmSpace_t* space, paddr_t as, uintptr_t vaddr, pte_t perm)
+// Frees iterator
+void MmPtabEndIterate (MmPtIter_t* iter)
 {
-    // Grab base and cache it
-    MmPtCacheEnt_t* cacheEnt = mmPtabWalk (space, as, vaddr);
-    // Map last entry
-    pte_t* lastSt = (pte_t*) cacheEnt->addr;
-    pte_t* lastEnt = &lastSt[MUL_IDX_LEVEL (vaddr, 1)];
-    // Change value
-    MmMulChangePte (lastEnt, perm);
-    MmPtabReturnCache (cacheEnt);
-}
-
-// Walks to a page table entry and returns it's mapping
-pte_t MmPtabGetPte (MmSpace_t* space, paddr_t as, uintptr_t vaddr)
-{
-    // Grab base and cache it
-    MmPtCacheEnt_t* cacheEnt = mmPtabWalk (space, as, vaddr);
-    // Get mapping
-    pte_t* lastSt = (pte_t*) cacheEnt->addr;
-    pte_t pte = lastSt[MUL_IDX_LEVEL (vaddr, 1)];
-    MmPtabReturnCache (cacheEnt);
-    return pte;
+    // Return every cached entry
+    for (int i = 0; i < MM_PTAB_MAX_LEVEL; ++i)
+    {
+        MmPtIterTable_t* table = &iter->ptIters[i];
+        if (table->cacheEnt)
+            MmPtabReturnCache (table->cacheEnt);
+    }
 }
 
 // Zeroes a page with the MUL

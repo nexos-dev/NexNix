@@ -34,6 +34,22 @@ typedef struct _ptcache
     struct _ptcache* prev;
 } MmPtCacheEnt_t;
 
+typedef struct _pttabiter
+{
+    int curPte;                  // Current PTE in this table
+    MmPtCacheEnt_t* cacheEnt;    // Cache entry for this table
+} MmPtIterTable_t;
+
+// PTE iterator
+typedef struct _pteiter
+{
+    uintptr_t addr;      // Current address in iterator
+    MmSpace_t* space;    // Address space we are iterating in
+    paddr_t asPhys;      // Address space physical base
+    MmPtCacheEnt_t* asCache;
+    MmPtIterTable_t ptIters[MM_PTAB_MAX_LEVEL];
+} MmPtIter_t;
+
 #define MM_PTAB_UNCACHED 0
 
 typedef struct _mmspace
@@ -46,6 +62,7 @@ typedef struct _mmspace
                               // Used to lazily update the TLB on CPUs where that is slow
     int freeCount;        // Free number of cache entries
     NkList_t pageList;    // Page table pages
+    int refCount;         // Number of references to this address space
     spinlock_t lock;      // Lock on address space
                           // Should be more granular but whatever
 #ifdef NEXNIX_ARCH_I386
@@ -60,16 +77,16 @@ typedef struct _mmspace
 void MmPtabInit (int numLevels);
 
 // Walks to a page table entry and maps specfied value into it
-void MmPtabWalkAndMap (MmSpace_t* space, paddr_t as, uintptr_t vaddr, pte_t pteVal);
+MmPtCacheEnt_t* MmPtabWalkAndMap (MmSpace_t* space, paddr_t as, uintptr_t vaddr, pte_t pte);
 
-// Walks to a page table entry and unmaps it
-void MmPtabWalkAndUnmap (MmSpace_t* space, paddr_t as, uintptr_t vaddr);
+// Walks to a pte and returns a cache entry
+MmPtCacheEnt_t* MmPtabWalk (MmSpace_t* space, paddr_t as, uintptr_t vaddr);
 
-// Walks to a page table entry and returns it
-pte_t MmPtabGetPte (MmSpace_t* space, paddr_t as, uintptr_t vaddr);
+// Iterates over PTEs in address space
+MmPtCacheEnt_t* MmPtabIterate (MmPtIter_t* iter);
 
-// Walks to a page table entry and changes its protection
-void MmPtabWalkAndChange (MmSpace_t* space, paddr_t as, uintptr_t vaddr, pte_t perm);
+// Frees iterator
+void MmPtabEndIterate (MmPtIter_t* iter);
 
 // Initializes PT cache in specified space
 void MmPtabInitCache (MmSpace_t* space);

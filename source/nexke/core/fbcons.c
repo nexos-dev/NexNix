@@ -25,6 +25,7 @@
 
 // Display structure
 static NexNixDisplay_t* display = NULL;
+static paddr_t frameBuf = 0;
 
 // Current column and row
 static int curCol = 0, curRow = 0;
@@ -70,7 +71,7 @@ void NkFbConsInit()
     // Initialze rows / cols
     rows = display->height / 16;
     cols = display->width / 8;
-    // Map the backbuffer
+    // Map the backbuffer and front buffer
     size_t numBufPages =
         ((display->bytesPerLine * display->height) + (NEXKE_CPU_PAGESZ - 1)) / NEXKE_CPU_PAGESZ;
     for (int i = 0; i < numBufPages; ++i)
@@ -78,8 +79,13 @@ void NkFbConsInit()
         MmMulMapEarly (NEXKE_BACKBUF_BASE + (i * NEXKE_CPU_PAGESZ),
                        (paddr_t) display->backBuffer + (i * NEXKE_CPU_PAGESZ),
                        MUL_PAGE_R | MUL_PAGE_RW | MUL_PAGE_KE);
+        MmMulMapEarly (NEXKE_FB_BASE + (i * NEXKE_CPU_PAGESZ),
+                       (paddr_t) display->frameBuffer + (i * NEXKE_CPU_PAGESZ),
+                       MUL_PAGE_R | MUL_PAGE_RW | MUL_PAGE_KE | MUL_PAGE_WT);
     }
+    frameBuf = (paddr_t) display->frameBuffer;
     display->backBuffer = (void*) NEXKE_BACKBUF_BASE;
+    display->frameBuffer = (void*) NEXKE_FB_BASE;
     //  Clear the display
     void* backBuf = display->backBuffer;
     for (int i = 0; i < display->height; ++i)
@@ -95,6 +101,23 @@ void NkFbConsInit()
     }
     display->backBufferLoc = display->backBuffer;
     memcpy (display->frameBuffer, display->backBuffer, display->lfbSize);
+}
+
+// Remaps framebuffer to WC
+void NkFbConsFbRemap()
+{
+    size_t numBufPages =
+        ((display->bytesPerLine * display->height) + (NEXKE_CPU_PAGESZ - 1)) / NEXKE_CPU_PAGESZ;
+    for (int i = 0; i < numBufPages; ++i)
+    {
+        MmPage_t* page =
+            MmFindPagePfn ((frameBuf + (i * NEXKE_CPU_PAGESZ)) >> NEXKE_CPU_PAGE_SHIFT);
+        MmMulMapPage (MmGetKernelSpace(),
+                      NEXKE_FB_BASE + (i * NEXKE_CPU_PAGESZ),
+                      page,
+                      MUL_PAGE_R | MUL_PAGE_RW | MUL_PAGE_KE | MUL_PAGE_WC);
+        MmFreePage (page);
+    }
 }
 
 // Invalidate an area

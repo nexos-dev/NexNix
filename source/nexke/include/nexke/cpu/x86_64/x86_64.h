@@ -50,7 +50,7 @@ void CpuSetGs (uintptr_t addr);
 
 // PFN map base
 #define NEXKE_PFNMAP_BASE 0xFFFFFFF000000000
-#define NEXKE_PFNMAP_MAX  (0xF00000000 - 0x10)
+#define NEXKE_PFNMAP_MAX  (0xE80000000 - 0x10)
 
 // Max page levels
 #define MM_PTAB_MAX_LEVEL 5

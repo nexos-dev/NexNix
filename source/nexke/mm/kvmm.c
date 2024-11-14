@@ -452,6 +452,8 @@ static void mmKvGetMemory (void* p, size_t numPages)
         if (!page)
             NkPanicOom();
         NkSpinLock (&page->lock);
+        // Fix this page in memory
+        MmFixPage (page);
         MmAddPage (kmemObj, offset + (i * NEXKE_CPU_PAGESZ), page);
         MmMulMapPage (&kmemSpace,
                       (uintptr_t) p + (i * NEXKE_CPU_PAGESZ),
@@ -475,13 +477,15 @@ static void mmKvFreeMemory (void* p, size_t numPages)
         {
             NkSpinLock (&page->lock);
             // Free it
-            MmPageClearMaps (page);
+            MmUnfixPage (page);
             MmRemovePage (page);
             MmFreePage (page);
             NkSpinUnlock (&page->lock);
         }
         offset += NEXKE_CPU_PAGESZ;
     }
+    // Unmap this region
+    MmMulUnmapRange (MmGetKernelSpace(), (uintptr_t) p, numPages);
 }
 
 // Allocates a region of memory

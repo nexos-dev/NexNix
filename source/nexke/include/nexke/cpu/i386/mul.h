@@ -37,9 +37,10 @@ typedef uint64_t pte_t;
 #define PF_A                   (1ULL << 5)
 #define PF_D                   (1ULL << 6)
 #define PF_PS                  (1ULL << 7)
-#define PF_PAT                 (1ULL << 7)
+#define PF_WC                  (1ULL << 7)
 #define PF_G                   (1ULL << 8)
-#define PF_PSPAT               (1ULL << 12)
+#define PF_F                   (1ULL << 11)
+#define PF_PSWC                (1ULL << 12)
 #define PF_NX                  (1ULL << 63)
 #define PT_FRAME               0x7FFFFFFFFFFFF000ULL
 #define PT_GETFRAME(pt)        ((pt) & (PT_FRAME))
@@ -82,9 +83,10 @@ typedef uint32_t pte_t;
 #define PF_A                       (1 << 5)
 #define PF_D                       (1 << 6)
 #define PF_PS                      (1 << 7)
-#define PF_PAT                     (1 << 7)
+#define PF_WC                      (1 << 7)
 #define PF_G                       (1 << 8)
-#define PF_PSPAT                   (1 << 12)
+#define PF_F                       (1 << 11)    // Software flag to indicate a page is fixed
+#define PF_PSWC                    (1 << 12)
 #define PT_FRAME                   0xFFFFF000
 #define PT_GETFRAME(pt)            ((pt) & (PT_FRAME))
 #define PT_SETFRAME(pt, frame)     ((pt) |= ((frame) & (PT_FRAME)))
@@ -113,6 +115,24 @@ void MmMulFlushCacheEntry (uintptr_t addr);
 
 #endif
 
+// PAT stuff
+#define MUL_PAT_MSR 0x277
+
+#define MUL_PAT_UC      0
+#define MUL_PAT_WC      1
+#define MUL_PAT_WT      4
+#define MUL_PAT_WB      6
+#define MUL_PAT_UCMINUS 7
+
+#define MUL_PAT0 0ULL
+#define MUL_PAT1 8ULL
+#define MUL_PAT2 16ULL
+#define MUL_PAT3 24ULL
+#define MUL_PAT4 32ULL
+#define MUL_PAT5 40ULL
+#define MUL_PAT6 48ULL
+#define MUL_PAT7 56ULL
+
 // PT cache defines
 #define MUL_MAX_PTCACHE        32
 #define MUL_PTCACHE_BASE       0xBFFDF000
@@ -128,7 +148,7 @@ static inline pte_t* MmMulGetCacheAddr (uintptr_t addr)
 // Maps a cache entry
 static inline void MmMulMapCacheEntry (pte_t* pte, paddr_t tab)
 {
-    *pte = tab | PF_P | PF_RW;
+    *pte = tab | PF_P | PF_RW | PF_F;
 }
 
 // Changes flags of entry
@@ -145,5 +165,8 @@ typedef struct _memspace MmSpace_t;
 
 // Allocates page table into ent
 paddr_t MmMulAllocTable (MmSpace_t* space, uintptr_t addr, pte_t* stBase, pte_t* ent);
+
+// Checks if address is a kernel address
+#define MmMulIsKernel(addr) ((addr) >= NEXKE_KERNEL_BASE)
 
 #endif

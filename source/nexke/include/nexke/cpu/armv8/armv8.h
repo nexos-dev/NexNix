@@ -58,7 +58,7 @@ void __attribute__ ((noreturn)) CpuCrash();
 
 // PFN map base
 #define NEXKE_PFNMAP_BASE 0xFFFFFFF000000000
-#define NEXKE_PFNMAP_MAX  (0xF00000000 - 0x10)
+#define NEXKE_PFNMAP_MAX  (0xE80000000 - 0x10)
 
 #define NEXKE_SERIAL_MMIO_BASE 0xFFFFFFFF90000000
 

@@ -188,6 +188,8 @@ void PltInitPhase2()
 // Initialize phase 3
 void PltInitPhase3()
 {
+    if (nkPlatform.primaryCons == &fbCons)
+        NkFbConsFbRemap();
     if (!PltAcpiDetectCpus())
     {
         NkLogDebug ("nexke: ACPI not supported\n");

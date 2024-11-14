@@ -43,11 +43,13 @@ typedef struct _pagebucket
     spinlock_t lock;
 } MmPageBucket_t;
 
-static MmPageBucket_t mmPageHash[MM_MAX_BUCKETS] = {0};
+static MmPageBucket_t* mmPageHash = NULL;
+static size_t mmNumBuckets = 0;    // Number of page buckets
 
 // Informational variables
-static uintmax_t mmNumPages = 0;     // Number of pages in system
-static uintmax_t mmFreePages = 0;    // Number of free pages in system
+static uintmax_t mmNumPages = 0;      // Number of pages in system
+static uintmax_t mmFreePages = 0;     // Number of free pages in system
+static uintmax_t mmFixedPages = 0;    // Number of fixed pages
 
 // Initializes an MmPage
 static void mmInitPage (MmPage_t* page, pfn_t pfn, MmZone_t* zone)
@@ -59,6 +61,7 @@ static void mmInitPage (MmPage_t* page, pfn_t pfn, MmZone_t* zone)
     page->link.prev = NULL, page->link.next = NULL;
     NkListAddFront (&zone->freeList, &page->link);
     page->maps = NULL;
+    page->fixCount = 0;
 }
 
 // Checks for overlap between two zones
@@ -252,6 +255,8 @@ static MmZone_t* mmZoneFindByPfn (pfn_t pfn)
 // Frees an MmPage
 void MmFreePage (MmPage_t* page)
 {
+    if (page->fixCount)
+        NkPanic ("nexke: can't free fixed page\n");
     // Don't free an unusable page
     if (page->flags & MM_PAGE_UNUSABLE && !page->zone)
         MmCacheFree (mmFakePageCache, page);
@@ -290,6 +295,16 @@ MmPage_t* MmAllocPage()
     page->flags = MM_PAGE_ALLOCED;
     NkSpinUnlock (&zone->lock);
     return page;    // Return this page
+}
+
+// Allocates a fixed page
+MmPage_t* MmAllocFixedPage()
+{
+    MmPage_t* pg = MmAllocPage();
+    NkSpinLock (&pg->lock);
+    MmFixPage (pg);
+    NkSpinUnlock (&pg->lock);
+    return pg;
 }
 
 // Finds/creates page structure at specified PFN
@@ -377,11 +392,12 @@ MmPage_t* MmAllocGuardPage()
     return page;
 }
 
-#define MM_GET_BUCKET(obj, off) ((CpuPageAlignDown ((uintptr_t) obj) + off) % MM_MAX_BUCKETS)
+#define MM_GET_BUCKET(obj, off) ((CpuPageAlignDown ((uintptr_t) obj) + off) % mmNumBuckets)
 
 // Adds a page to a page hash list
 void MmAddPage (MmObject_t* obj, size_t off, MmPage_t* page)
 {
+    assert (!(page->flags & MM_PAGE_IN_OBJECT));
     // Find bucket
     size_t bucketIdx = MM_GET_BUCKET (obj, off);
     MmPageBucket_t* bucket = &mmPageHash[bucketIdx];
@@ -423,6 +439,8 @@ MmPage_t* MmLookupPage (MmObject_t* obj, size_t off)
 // Removes a page from the specified hash list
 void MmRemovePage (MmPage_t* page)
 {
+    // Make sure page is in object
+    assert (page->flags & MM_PAGE_IN_OBJECT);
     // Find bucket
     size_t bucketIdx = MM_GET_BUCKET (page->obj, page->offset);
     MmPageBucket_t* bucket = &mmPageHash[bucketIdx];
@@ -438,29 +456,38 @@ void MmRemovePage (MmPage_t* page)
     page->flags &= ~(MM_PAGE_IN_OBJECT);
 }
 
-// Adds mapping to page
-void MmPageAddMap (MmPage_t* page, MmSpace_t* space, uintptr_t addr)
+// Fixes a page in memory
+void MmFixPage (MmPage_t* page)
 {
-    // Allocate page map
-    MmPageMap_t* map = MmCacheAlloc (mmPageMapCache);
-    map->addr = addr;
-    map->space = space;
-    map->next = page->maps;
-    page->maps = map;
+    // If page is unusable, ignore
+    if (page->flags & MM_PAGE_UNUSABLE)
+        return;
+    ++page->fixCount;
+    // Check if this is the first fix
+    if (!(page->flags & MM_PAGE_FIXED))
+    {
+        page->flags |= MM_PAGE_FIXED;
+        ++mmFixedPages;
+        // Tell MUL
+        MmMulFixPage (page);
+    }
 }
 
-// Clears mappings from page
-void MmPageClearMaps (MmPage_t* page)
+// Un-fixes a page from memory
+void MmUnfixPage (MmPage_t* page)
 {
-    MmPageMap_t* map = page->maps;
-    while (map)
+    // If page is unusable, ignore
+    if (page->flags & MM_PAGE_UNUSABLE)
+        return;
+    --page->fixCount;
+    // Check if this is the first fix
+    if (!page->fixCount)
     {
-        MmMulUnmapPage (map->space, map->addr);
-        MmPageMap_t* tmp = map;
-        map = map->next;
-        MmCacheFree (mmPageMapCache, tmp);
+        page->flags &= ~(MM_PAGE_FIXED);
+        --mmFixedPages;
+        // Tell MUL
+        MmMulUnfixPage (page);
     }
-    page->maps = NULL;
 }
 
 static char* zonesFlags[] = {"MM_ZONE_KERNEL ",
@@ -516,11 +543,18 @@ void MmInitPage()
         }
 #endif
     }
-    // Step 2: allocate space for PFN map
+    // Step 2: figure out the size of page hash map
+    // We set it equal to the power of two greater than half the number of pages in the system
+    mmNumBuckets = 1;
+    while (mmNumBuckets < (numPfns / 2))
+        mmNumBuckets <<= 1;
+    // Step 3: allocate space for PFN map and page hash map
     // We will allocate the zone structures from the slab, however, since
     // the amount of memory the slab has to work with is limited right now,
     // we will grab memory for the page structures straight from the memory map
     void* pageMap = NULL;
+    // Figure out the size of memory that we need
+    size_t pageMapSz = (numPfns * sizeof (MmPage_t)) + (mmNumBuckets * sizeof (MmPageBucket_t));
     // Find a contigous region of memory for PFN map
     for (int i = 0; i < lastMapEnt; ++i)
     {
@@ -528,30 +562,35 @@ void MmInitPage()
             memMap[i].type == NEXBOOT_MEM_BOOT_RECLAIM)
         {
             // Determine if there is enough space
-            if (memMap[i].sz > (numPfns * sizeof (MmPage_t)))
+            if (memMap[i].sz > pageMapSz)
             {
                 // Decrease available space
-                memMap[i].sz -= CpuPageAlignUp (numPfns * sizeof (MmPage_t));
+                memMap[i].sz -= CpuPageAlignUp (pageMapSz);
                 // Determine our base address
                 paddr_t mapPhys = memMap[i].base + memMap[i].sz;
                 // Map it
-                size_t numPfnPages =
-                    ((numPfns * sizeof (MmPage_t)) + (NEXKE_CPU_PAGESZ - 1)) / NEXKE_CPU_PAGESZ;
-                for (int i = 0; i < numPfnPages; ++i)
+                size_t numMapPages = CpuPageAlignUp (pageMapSz) / NEXKE_CPU_PAGESZ;
+                // Figure out size of PFN map without hash map
+                size_t pfnMapSz = numPfns * sizeof (MmPage_t);
+                for (int i = 0; i < numMapPages; ++i)
                 {
                     MmMulMapEarly (NEXKE_PFNMAP_BASE + (i * NEXKE_CPU_PAGESZ),
                                    mapPhys + (i * NEXKE_CPU_PAGESZ),
                                    MUL_PAGE_RW | MUL_PAGE_R | MUL_PAGE_KE);
                 }
-                NkLogDebug ("nexke: Allocating PFN map from %#llX to %#llX\n",
+                NkLogDebug ("nexke: Allocated PFN map from %#llX to %#llX\n",
                             (uint64_t) mapPhys,
-                            (uint64_t) mapPhys + (numPfnPages * NEXKE_CPU_PAGESZ));
+                            (uint64_t) mapPhys + pfnMapSz);
+                NkLogDebug ("nexke: Allocated page hash map from %#llX to %#llX\n",
+                            (uint64_t) mapPhys + pfnMapSz,
+                            (uint64_t) mapPhys + (numMapPages * NEXKE_CPU_PAGESZ));
+                // Set page hash map base
+                mmPageHash = (MmPageBucket_t*) (NEXKE_PFNMAP_BASE + pfnMapSz);
                 break;
             }
         }
     }
-    // We have now created the PFN map
-    // Now we need to initialize the zones
+    // Step 4: initialize the zones
     mmZoneCache = MmCacheCreate (sizeof (MmZone_t), "MmZone_t", 0, 0);
     for (int i = 0; i < lastMapEnt; ++i)
     {
@@ -673,6 +712,8 @@ void MmInitPage()
     // Create page map cache
     mmPageMapCache = MmCacheCreate (sizeof (MmPageMap_t), "MmPageMap_t", 0, 0);
     assert (mmPageMapCache);
+    // Clear the hash map
+    memset (mmPageHash, 0, mmNumBuckets * sizeof (MmPageBucket_t));
 }
 
 // Dumps out page debugging info

@@ -1,5 +1,5 @@
 /*
-    mul.h - contains MUL implementation
+    mul.c - contains MUL implementation
     Copyright 2024 The NexNix Project
 
     Licensed under the Apache License, Version 2.0 (the "License");
