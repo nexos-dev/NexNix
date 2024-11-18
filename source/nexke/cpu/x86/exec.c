@@ -73,7 +73,7 @@ static bool CpuPageFault (NkInterrupt_t* intObj, CpuIntContext_t* ctx)
 void CpuGetExecInf (CpuExecInf_t* out, NkInterrupt_t* intObj, CpuIntContext_t* ctx)
 {
     // Ensure exception is within bounds
-    if (intObj->vector > CPU_EXEC_MAX)
+    if (intObj->vector > CPU_EXEC_NUM)
         PltBadTrap (ctx, "invalid exception");    // Very odd indeed
     out->name = cpuExecNameTab[intObj->vector];
 }
@@ -81,6 +81,13 @@ void CpuGetExecInf (CpuExecInf_t* out, NkInterrupt_t* intObj, CpuIntContext_t* c
 // Registers exception handlers
 void CpuRegisterExecs()
 {
-    // Install all interrupts
-    PltInstallExec (CPU_EXEC_PF, CpuPageFault);
+    // Install all general exception handlers
+    for (int i = 0; i < CPU_EXEC_NUM; ++i)
+    {
+        // Install special handlers
+        if (i == CPU_EXEC_PF)
+            PltInstallExec (i, CpuPageFault);
+        else
+            PltInstallExec (i, NULL);
+    }
 }

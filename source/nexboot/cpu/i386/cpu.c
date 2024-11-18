@@ -158,5 +158,5 @@ void nbCpuAsmLaunch (uintptr_t stack, uintptr_t entry, uintptr_t bootInf);
 void NbCpuLaunchKernel (uintptr_t entry, uintptr_t bootInf)
 {
     // Launch it
-    nbCpuAsmLaunch (NB_KE_STACK_BASE - 16, entry, bootInf);
+    nbCpuAsmLaunch (NB_KE_STACK_BASE, entry, bootInf);
 }

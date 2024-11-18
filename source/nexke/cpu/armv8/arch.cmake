@@ -25,4 +25,7 @@ list(APPEND NEXKE_SOURCES
     cpu/armv8/cpudep.c
     cpu/armv8/cpuhelp.c
     cpu/armv8/cpu.S
-    cpu/armv8/mul.c)
+    cpu/armv8/mul.c
+    cpu/armv8/exec.c
+    cpu/armv8/trap.S
+    mm/ptab.c)

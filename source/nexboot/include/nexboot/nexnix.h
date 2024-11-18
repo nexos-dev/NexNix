@@ -29,6 +29,8 @@
 #define NEXBOOT_MEMPOOL_BASE 0xFFFFFFFF88000000
 #endif
 
+#define NEXBOOT_STACK_SIZE 8192
+
 // NexNix boot structures
 #ifdef NEXNIX_ARCH_RISCV64
 typedef struct _nncpu

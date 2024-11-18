@@ -24,29 +24,35 @@
 extern NkConsole_t fbCons;
 extern NkConsole_t pl011Cons;
 
-static NkConsole_t* primaryCons = NULL;      // Primary console
-static NkConsole_t* secondaryCons = NULL;    // Secondary console
+static NkPlatform_t nkPlatform;
 
 // Sets up platform drivers
 void PltInitDrvs()
 {
+    // Initialize platform
+    nkPlatform.type = PLT_TYPE_SBSA;
+    nkPlatform.subType = 0;
     // Initialize framebuffer console
     if (!NkGetBootArgs()->displayDefault)
     {
         NkFbConsInit();
-        primaryCons = &fbCons;
+        nkPlatform.primaryCons = &fbCons;
     }
+    // Initialize lists
+    NkListInit (&nkPlatform.cpus);
+    NkListInit (&nkPlatform.intCtrls);
+    NkListInit (&nkPlatform.ints);
     // Setup ACPI
     if (!PltAcpiInit())
     {
         // This is not an SBSA / EBBR compliant system.
         // Just crash
-        if (primaryCons)
-            primaryCons->write ("nexke: fatal error: system doesn't support ACPI");
+        if (nkPlatform.primaryCons)
+            nkPlatform.primaryCons->write ("nexke: fatal error: system doesn't support ACPI");
         CpuCrash();
     }
     // Get DBG2 table to find serial port
-    void* dbgTab = PltAcpiFindTable ("DBG2");
+    void* dbgTab = PltAcpiFindTableEarly ("DBG2");
     if (dbgTab)
     {
         //  Grab table
@@ -64,9 +70,9 @@ void PltInitDrvs()
                     // Initialize it
                     AcpiGas_t* gas = (void*) desc + desc->barOffset;
                     PltPL011Init (gas);
-                    if (!primaryCons)
-                        primaryCons = &pl011Cons;
-                    secondaryCons = &pl011Cons;
+                    if (!nkPlatform.primaryCons)
+                        nkPlatform.primaryCons = &pl011Cons;
+                    nkPlatform.secondaryCons = &pl011Cons;
                 }
             }
             desc = (void*) desc + desc->len;
@@ -74,14 +80,97 @@ void PltInitDrvs()
     }
 }
 
+// Adds CPU to platform
+void PltAddCpu (PltCpu_t* cpu)
+{
+    NkListAddBack (&nkPlatform.cpus, &cpu->link);
+    ++nkPlatform.numCpus;
+    NkLogDebug ("nexke: found CPU, interrupt controller %s, ID %d\n",
+                pltCpuTypes[cpu->type],
+                cpu->id);
+}
+
+// Adds interrupt to platform
+void PltAddInterrupt (PltIntOverride_t* intSrc)
+{
+    NkListAddFront (&nkPlatform.ints, &intSrc->link);
+    NkLogDebug ("nexke: found interrupt override, line %d, bus %s, mode %s, polarity %s, GSI %u\n",
+                intSrc->line,
+                pltBusTypes[intSrc->bus],
+                (intSrc->mode == PLT_MODE_EDGE) ? "edge" : "level",
+                (intSrc->polarity == PLT_POL_ACTIVE_HIGH) ? "high" : "low",
+                intSrc->gsi);
+}
+
+// Adds interrupt controller to platform
+void PltAddIntCtrl (PltIntCtrl_t* intCtrl)
+{
+    NkListAddBack (&nkPlatform.intCtrls, &intCtrl->link);
+    ++nkPlatform.numIntCtrls;
+    NkLogDebug ("nexke: found interrupt controller, type %s, base GSI %u, address %#llX\n",
+                pltIntCtrlTypes[intCtrl->type],
+                intCtrl->gsiBase,
+                intCtrl->addr);
+}
+
+// Resolves an interrupt line from bus-specific to a GSI
+uint32_t PltGetGsi (int bus, int line)
+{
+    // If we are using 8259A, don't worry about doing this
+    if (nkPlatform.intCtrl->type == PLT_INTCTRL_8259A)
+        return line;
+    // Search through interrupt overrides
+    NkLink_t* iter = NkListFront (&nkPlatform.ints);
+    while (iter)
+    {
+        PltIntOverride_t* intSrc = LINK_CONTAINER (iter, PltIntOverride_t, link);
+        // Check if this is it
+        if (intSrc->bus == bus && intSrc->line == line)
+            return intSrc->gsi;
+        iter = NkListIterate (iter);
+    }
+    return line;
+}
+
+// Gets an interrupt override based on the GSI
+PltIntOverride_t* PltGetOverride (uint32_t gsi)
+{
+    // Search through interrupt overrides
+    NkLink_t* iter = NkListFront (&nkPlatform.ints);
+    while (iter)
+    {
+        PltIntOverride_t* intSrc = LINK_CONTAINER (iter, PltIntOverride_t, link);
+        // Check if this is it
+        if (intSrc->gsi == gsi)
+            return intSrc;
+        iter = NkListIterate (iter);
+    }
+    return NULL;
+}
+
+void PltInitPhase2()
+{
+    PltInitInterrupts();
+}
+
+void PltInitPhase3()
+{
+}
+
+// Returns platform
+NkPlatform_t* PltGetPlatform()
+{
+    return &nkPlatform;
+}
+
 // Gets primary console
 NkConsole_t* PltGetPrimaryCons()
 {
-    return primaryCons;
+    return nkPlatform.primaryCons;
 }
 
 // Gets secondary console
 NkConsole_t* PltGetSecondaryCons()
 {
-    return secondaryCons;
+    return nkPlatform.secondaryCons;
 }

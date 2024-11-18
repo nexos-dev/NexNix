@@ -83,9 +83,6 @@
 #define CPU_FEATURE_ARAT          (1ULL << 54)
 #define CPU_FEATURE_INVARIANT_TSC (1ULL << 55)
 
-// Gets feature bits
-uint64_t CpuGetFeatures();
-
 // Waits for IO completion
 void CpuIoWait();
 
@@ -323,6 +320,7 @@ static inline NkCcb_t* CpuGetCcb()
 #define CPU_EXEC_XM  19
 #define CPU_EXEC_VE  20
 #define CPU_EXEC_CP  21
+#define CPU_EXEC_NUM 22
 #define CPU_EXEC_MAX 31
 
 #endif

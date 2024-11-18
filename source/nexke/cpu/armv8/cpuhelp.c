@@ -16,6 +16,8 @@
 */
 
 #include <nexke/cpu.h>
+#include <nexke/nexke.h>
+#include <stdio.h>
 
 // Gets current exception level
 int CpuGetEl()
@@ -56,4 +58,71 @@ void CpuUnholdInts()
 void CpuHalt()
 {
     asm ("wfi");
+}
+
+void CpuPrintDebug (CpuIntContext_t* context)
+{
+    // Basically we just dump all the registers
+    va_list ap;
+    NkLogMessage ("CPU dump:\n", NK_LOGLEVEL_EMERGENCY, ap);
+    char buf[2048] = {0};
+    sprintf (buf,
+             "x0: %#016llX x1: %#016llX x2: %#016llX\nx3: %#016llX x4: %#016llX x5:%#016llX\nx6: "
+             "%#016llX x7: %#016llX ",
+             context->x0,
+             context->x1,
+             context->x2,
+             context->x3,
+             context->x4,
+             context->x5,
+             context->x6,
+             context->x7);
+    NkLogMessage (buf, NK_LOGLEVEL_EMERGENCY, ap);
+    sprintf (
+        buf,
+        "x8: %#016llX\nx9: %#016llX x10: %#016llX x11: %#016llX\nx12: %#016llX x13: %#016llX x14: "
+        "%#016llX\nx15: %#016llX ",
+        context->x8,
+        context->x9,
+        context->x10,
+        context->x11,
+        context->x12,
+        context->x13,
+        context->x14,
+        context->x15);
+    NkLogMessage (buf, NK_LOGLEVEL_EMERGENCY, ap);
+    sprintf (buf,
+             "x16: %#016llX x17: %#016llX\nx18: %#016llX x19: %#016llX x20: %#016llX\nx21: "
+             "%#016llX x22: %#016llX x23: %#016llX\n",
+             context->x16,
+             context->x17,
+             context->x18,
+             context->x19,
+             context->x20,
+             context->x21,
+             context->x22,
+             context->x23);
+    NkLogMessage (buf, NK_LOGLEVEL_EMERGENCY, ap);
+    sprintf (buf,
+             "x24: %#016llX x25: %#016llX x26: %#016llX\nx27: %#016llX x28: %#016llX x29: "
+             "%#016llX\nx30: %#016llX sp_el0: %#016llX ",
+             context->x24,
+             context->x25,
+             context->x26,
+             context->x27,
+             context->x28,
+             context->x29,
+             context->x30,
+             context->spEl0);
+    NkLogMessage (buf, NK_LOGLEVEL_EMERGENCY, ap);
+    sprintf (buf,
+             "elr_el1: %#016llX\nspsr_el1: %#016llX tpidr_el1: %#016llX hndlr: %#02llX\nesr_el1: "
+             "%#016llX far_el1: %#016llX\n",
+             context->elr,
+             context->spsr,
+             context->tpidr,
+             context->handler,
+             CpuReadSpr ("ESR_EL1"),
+             CpuReadSpr ("FAR_EL1"));
+    NkLogMessage (buf, NK_LOGLEVEL_EMERGENCY, ap);
 }

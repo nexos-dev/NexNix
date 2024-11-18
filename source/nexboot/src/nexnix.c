@@ -144,9 +144,16 @@ bool NbOsBootNexNix (NbOsInfo_t* info)
     // Load up the kernel into memory
     uintptr_t entry = NbElfLoadFile (keFileBase);
     // Allocate a boot stack
-    uintptr_t stack = NbFwAllocPersistentPage();
-    memset ((void*) stack, 0, NEXBOOT_CPU_PAGE_SIZE);
-    NbCpuAsMap (NB_KE_STACK_BASE - NEXBOOT_CPU_PAGE_SIZE, stack, NB_CPU_AS_RW | NB_CPU_AS_NX);
+    int stackPages = NEXBOOT_STACK_SIZE / NEXBOOT_CPU_PAGE_SIZE;
+    uintptr_t stack = NbFwAllocPersistentPages (stackPages);
+    memset ((void*) stack, 0, NEXBOOT_STACK_SIZE);
+    uintptr_t stackVirt = NB_KE_STACK_BASE - NEXBOOT_STACK_SIZE;
+    for (int i = 0; i < stackPages; ++i)
+    {
+        NbCpuAsMap (stackVirt + (i * NEXBOOT_CPU_PAGE_SIZE),
+                    stack + (i * NEXBOOT_CPU_PAGE_SIZE),
+                    NB_CPU_AS_RW | NB_CPU_AS_NX);
+    }
     // Get memory map
     bootInfo->memMap = NbGetMemMap (&bootInfo->mapSize);
     // Allocate a buffer for the memory mao

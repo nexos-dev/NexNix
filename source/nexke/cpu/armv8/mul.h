@@ -40,7 +40,7 @@ static uint8_t idxShiftTab[] = {0, 12, 21, 30, 39, 48};
 #define PF_XN                  (1ULL << 54)
 #define PF_AF                  (1ULL << 10)
 #define PF_FRAME               0xFFFFFFFFF000
-#define PF_GETFRAME(pt)        ((pt) & (PF_FRAME))
+#define PT_GETFRAME(pt)        ((pt) & (PF_FRAME))
 #define PF_SETFRAME(pt, frame) ((pt) |= ((frame) & (PF_FRAME)))
 
 // Value to mask with to get non-canonical address

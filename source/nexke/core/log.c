@@ -26,7 +26,7 @@
 // Log entry structure
 typedef struct _logentry
 {
-    char msg[128];    // Message buffer
+    char msg[256];    // Message buffer
     int logLevel;     // Loglevel of message
     NkLink_t link;    // Link to next entry
 } NkLogEntry_t;

@@ -20,6 +20,9 @@
 
 #include <stdint.h>
 
+// General PTE type
+typedef uint64_t pte_t;
+
 // FIXME: This module currently only supports 48-bit addresses, whereas
 // ARMv8 theoretically allows 52-bit addresses. This is for simplicity's sake
 
@@ -40,7 +43,7 @@ static uint8_t idxShiftTab[] = {0, 12, 21, 30, 39, 48};
 #define PF_XN                  (1ULL << 54)
 #define PF_AF                  (1ULL << 10)
 #define PF_FRAME               0xFFFFFFFFF000
-#define PF_GETFRAME(pt)        ((pt) & (PF_FRAME))
+#define PT_GETFRAME(pt)        ((pt) & (PF_FRAME))
 #define PF_SETFRAME(pt, frame) ((pt) |= ((frame) & (PF_FRAME)))
 
 // Value to mask with to get non-canonical address
@@ -52,7 +55,34 @@ static uint8_t idxShiftTab[] = {0, 12, 21, 30, 39, 48};
 // Max level of page tables
 #define MM_PTAB_MAX_LEVEL 4
 
-// General PTE type
-typedef uint64_t pte_t;
+// PT cache defines
+#define MUL_MAX_PTCACHE        85
+#define MUL_PTCACHE_BASE       0xFFFFFFFF00200000
+#define MUL_PTCACHE_TABLE_BASE 0xFFFFFFFF00001000
+#define MUL_PTCACHE_ENTRY_BASE 0xFFFFFFFF00000000
+
+// Obtains PTE address of specified PT cache entry
+static inline pte_t* MmMulGetCacheAddr (uintptr_t addr)
+{
+    return (pte_t*) ((MUL_IDX_LEVEL (addr, 1) * sizeof (pte_t)) + MUL_PTCACHE_TABLE_BASE);
+}
+
+// Maps a cache entry
+static inline void MmMulMapCacheEntry (pte_t* pte, paddr_t tab)
+{
+}
+
+#define MmMulFlushCacheEntry MmMulFlush
+
+// Validates that we can map pte2 to pte1
+void MmMulVerify (pte_t pte1, pte_t pte2);
+
+typedef struct _memspace MmSpace_t;
+
+// Allocates page table into ent
+paddr_t MmMulAllocTable (MmSpace_t* space, uintptr_t addr, pte_t* stBase, pte_t* ent);
+
+// Checks if address is a kernel address
+#define MmMulIsKernel(addr) ((addr) >= NEXKE_KERNEL_BASE)
 
 #endif

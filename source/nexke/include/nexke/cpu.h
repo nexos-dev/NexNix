@@ -54,20 +54,28 @@ typedef struct _nkccb
 } NkCcb_t;
 
 // Defined CPU architectures
-#define NEXKE_CPU_I386   1
-#define NEXKE_CPU_X86_64 2
+#define NEXKE_CPU_I386    1
+#define NEXKE_CPU_X86_64  2
+#define NEXKE_CPU_ARMV8   3
+#define NEXKE_CPU_RISCV64 4
 
 // Defined CPU familys
-#define NEXKE_CPU_FAMILY_X86 1
+#define NEXKE_CPU_FAMILY_X86   1
+#define NEXKE_CPU_FAMILY_ARM   2
+#define NEXKE_CPU_FAMILY_RISCV 3
 
 // Defined boards
-#define NEXKE_BOARD_PC 1
+#define NEXKE_BOARD_PC   1
+#define NEXKE_BOARD_SBSA 2
 
 // Initializes CPU control block
 void CpuInitCcb();
 
 // Registers exception handlers
 void CpuRegisterExecs();
+
+// Gets feature flags
+uint64_t CpuGetFeatures();
 
 // Returns CCB to caller
 NkCcb_t* CpuGetCcb();

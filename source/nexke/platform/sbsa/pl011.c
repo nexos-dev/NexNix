@@ -93,7 +93,7 @@ bool PltPL011Init (AcpiGas_t* gas)
     // Map it
     MmMulMapEarly (pl011Base, pl011Phys, MUL_PAGE_KE | MUL_PAGE_R | MUL_PAGE_RW | MUL_PAGE_CD);
     // Get SPCR
-    AcpiSpcr_t* spcr = (AcpiSpcr_t*) PltAcpiFindTable ("SPCR");
+    AcpiSpcr_t* spcr = (AcpiSpcr_t*) PltAcpiFindTableEarly ("SPCR");
     if (!spcr)
         return false;    // No way to determine baud rate
     // Determine clock

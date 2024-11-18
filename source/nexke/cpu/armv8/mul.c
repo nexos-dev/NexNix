@@ -22,6 +22,78 @@
 // Global representing max page level
 static int mulMaxLevel = 4;
 
+// Initializes MUL
+void MmMulInit()
+{
+}
+
+// Allocates page table into ent
+paddr_t MmMulAllocTable (MmSpace_t* space, uintptr_t addr, pte_t* stBase, pte_t* ent)
+{
+}
+
+// Verifies mappability of pte2 into pte1
+void MmMulVerify (pte_t pte1, pte_t pte2)
+{
+}
+
+// Creates an MUL address space
+void MmMulCreateSpace (MmSpace_t* space)
+{
+}
+
+// References an address space
+void MmMulRefSpace (MmSpace_t* space)
+{
+}
+
+// Destroys an MUL address space
+void MmMulDeRefSpace (MmSpace_t* space)
+{
+}
+
+// Maps page into address space
+void MmMulMapPage (MmSpace_t* space, uintptr_t virt, MmPage_t* page, int perm)
+{
+}
+
+// Unmaps a range out of an address space
+void MmMulUnmapRange (MmSpace_t* space, uintptr_t base, size_t count)
+{
+}
+
+// Changes protection on range of address space
+void MmMulProtectRange (MmSpace_t* space, uintptr_t base, size_t count, int perm)
+{
+}
+
+// Unmaps a page and removes all its mappings
+void MmMulUnmapPage (MmPage_t* page)
+{
+}
+
+// Changes protection on a page
+void MmMulProtectPage (MmPage_t* page, int perm)
+{
+}
+
+// Fixes a page in an address space
+void MmMulFixPage (MmPage_t* page)
+{
+}
+
+// Unfixes a page
+void MmMulUnfixPage (MmPage_t* page)
+{
+}
+
+// Gets mapping for specified virtual address
+MmPage_t* MmMulGetMapping (MmSpace_t* space, uintptr_t virt)
+{
+}
+
+// Early MUL
+
 // Gets physical address of virtual address early in boot process
 uintptr_t MmMulGetPhysEarly (uintptr_t virt)
 {
@@ -40,9 +112,9 @@ uintptr_t MmMulGetPhysEarly (uintptr_t virt)
         if (!(*ent))
             NkPanic ("cannot get physical address of non-existant page");
         // Get physical address
-        curSt = (pte_t*) PF_GETFRAME (*ent);
+        curSt = (pte_t*) PT_GETFRAME (*ent);
     }
-    return PF_GETFRAME (curSt[MUL_IDX_LEVEL (pgAddr, 1)]);
+    return PT_GETFRAME (curSt[MUL_IDX_LEVEL (pgAddr, 1)]);
 }
 
 // Maps a virtual address to a physical address early in the boot process
@@ -77,7 +149,7 @@ void MmMulMapEarly (uintptr_t virt, paddr_t phys, int flags)
             if (!(*ent & PF_EL0) && pgFlags & PF_EL0)
                 NkPanic ("nexke: cannot map user page to kernel memory area");
             // Grab the structure and move to next level
-            curSt = (pte_t*) (PF_GETFRAME (*ent));
+            curSt = (pte_t*) (PT_GETFRAME (*ent));
         }
         else
         {

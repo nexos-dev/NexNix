@@ -21,3 +21,13 @@ CpuCrash:
     msr daif, x3
     wfi
     b CpuCrash
+
+.global MmMulFlush
+
+MmMulFlush:
+
+// Performs a context switch
+// Very critical code path
+.global CpuSwitchContext
+CpuSwitchContext:
+

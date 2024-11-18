@@ -305,6 +305,9 @@ bool PltAcpiInit();
 // Finds an ACPI table
 AcpiSdt_t* PltAcpiFindTable (const char* sig);
 
+// Finds an ACPI table early in the boot process, pre-MM
+AcpiSdt_t* PltAcpiFindTableEarly (const char* sig);
+
 // Initializes ACPI PM timer
 PltHwClock_t* PltAcpiInitClock();
 

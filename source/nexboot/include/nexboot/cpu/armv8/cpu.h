@@ -44,20 +44,20 @@ static inline uint64_t NbPageAlignDown (uint64_t ptr)
 /// Halts system
 void NbCrash();
 
-#define NB_KE_STACK_BASE 0xFFFFFFFF80000000
+#define NB_KE_STACK_BASE 0xFFFFFFFFCFFF0000
 
 typedef uint64_t paddr_t;
 
 void NbCpuLaunchKernel (uintptr_t entry, uintptr_t bootInf);
 
 // MSR functions
-#define NbCpuReadMsr(msr)                           \
-    ({                                              \
-        uint64_t __tmp = 0;                         \
-        asm volatile("mrs %0, " msr : "=r"(__tmp)); \
-        __tmp;                                      \
+#define NbCpuReadMsr(msr)                            \
+    ({                                               \
+        uint64_t __tmp = 0;                          \
+        asm volatile ("mrs %0, " msr : "=r"(__tmp)); \
+        __tmp;                                       \
     })
 
-#define NbCpuWriteMsr(msr, val) asm volatile("msr " msr ", %0" : : "r"(val));
+#define NbCpuWriteMsr(msr, val) asm volatile ("msr " msr ", %0" : : "r"(val));
 
 #endif

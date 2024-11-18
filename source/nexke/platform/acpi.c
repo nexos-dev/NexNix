@@ -231,6 +231,49 @@ AcpiSdt_t* PltAcpiFindTable (const char* sig)
     return res;
 }
 
+// Finds an ACPI table early in the boot process, pre-MM
+AcpiSdt_t* PltAcpiFindTableEarly (const char* sig)
+{
+    assert (strlen (sig) == 4);
+    NexNixBoot_t* boot = NkGetBootArgs();
+    // Find ACPI component
+    if (!(boot->detectedComps & (1 << NB_TABLE_ACPI)))
+    {
+        return false;    // ACPI doesn't exist
+    }
+    // Get RSDP
+    AcpiRsdp_t* rsdp = (AcpiRsdp_t*) boot->comps[NB_TABLE_ACPI];
+    bool isAcpi2 = (rsdp->rev > 1) ? true : false;
+    AcpiSdt_t* rsdt = (AcpiSdt_t*) rsdp->rsdtAddr;
+    AcpiSdt_t* xsdt = (AcpiSdt_t*) rsdp->xsdtAddr;
+    // Check wheter to look through XSDT or RSDT
+    if (isAcpi2 && xsdt)
+    {
+        // Get number of entries
+        size_t numEnt = (xsdt->length - sizeof (AcpiSdt_t)) / sizeof (uint64_t);
+        uint64_t* entList = (uint64_t*) (xsdt + 1);
+        for (int i = 0; i < numEnt; ++i)
+        {
+            AcpiSdt_t* curSdt = (AcpiSdt_t*) ((uintptr_t) entList[i]);
+            if (!memcmp (curSdt->sig, sig, 4))
+                return curSdt;
+        }
+    }
+    else
+    {
+        // Get number of entries
+        size_t numEnt = (rsdt->length - sizeof (AcpiSdt_t)) / sizeof (uint32_t);
+        uint32_t* entList = (uint32_t*) (rsdt + 1);
+        for (int i = 0; i < numEnt; ++i)
+        {
+            AcpiSdt_t* curSdt = (AcpiSdt_t*) ((uintptr_t) entList[i]);
+            if (!memcmp (curSdt->sig, sig, 4))
+                return curSdt;
+        }
+    }
+    return NULL;
+}
+
 // Detects all CPUs attached to the platform
 bool PltAcpiDetectCpus()
 {
