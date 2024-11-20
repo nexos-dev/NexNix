@@ -1,5 +1,5 @@
 /*
-    sbsa.c - contains SBSA components of nexke
+    detect.c - contains generic DTB / ACPI detector
     Copyright 2024 The NexNix Project
 
     Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,19 +18,19 @@
 #include <nexke/nexboot.h>
 #include <nexke/nexke.h>
 #include <nexke/platform.h>
-#include <nexke/platform/sbsa.h>
+#include <nexke/platform/generic.h>
 
 // Console struct externs
 extern NkConsole_t fbCons;
 extern NkConsole_t pl011Cons;
 
-static NkPlatform_t nkPlatform;
+static NkPlatform_t nkPlatform = {0};
 
 // Sets up platform drivers
 void PltInitDrvs()
 {
     // Initialize platform
-    nkPlatform.type = PLT_TYPE_SBSA;
+    nkPlatform.type = PLT_TYPE_GENERIC;
     nkPlatform.subType = 0;
     // Initialize framebuffer console
     if (!NkGetBootArgs()->displayDefault)
@@ -45,7 +45,6 @@ void PltInitDrvs()
     // Setup ACPI
     if (!PltAcpiInit())
     {
-        // This is not an SBSA / EBBR compliant system.
         // Just crash
         if (nkPlatform.primaryCons)
             nkPlatform.primaryCons->write ("nexke: fatal error: system doesn't support ACPI");
@@ -64,6 +63,7 @@ void PltInitDrvs()
             // Check type / subtype to see if it is supported
             if (desc->portType == ACPI_DBG_PORT_SERIAL)
             {
+#ifdef NEXNIX_BASEARCH_ARM
                 // Check sub-type
                 if (desc->portSubtype == ACPI_DBG_PORT_PL011)
                 {
@@ -74,6 +74,7 @@ void PltInitDrvs()
                         nkPlatform.primaryCons = &pl011Cons;
                     nkPlatform.secondaryCons = &pl011Cons;
                 }
+#endif
             }
             desc = (void*) desc + desc->len;
         }
@@ -155,6 +156,10 @@ void PltInitPhase2()
 
 void PltInitPhase3()
 {
+    if (nkPlatform.primaryCons == &fbCons)
+        NkFbConsFbRemap();
+    if (!PltAcpiDetectCpus())
+        NkPanic ("nexke: CPU detection failed\n");
 }
 
 // Returns platform

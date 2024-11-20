@@ -297,7 +297,7 @@ PltHwClock_t* PltHpetInitClock()
     // Map it
     hpet.addr = (uintptr_t) MmAllocKvMmio ((paddr_t) hpetAcpi->base.addr,
                                            1,
-                                           MUL_PAGE_KE | MUL_PAGE_R | MUL_PAGE_RW | MUL_PAGE_CD);
+                                           MUL_PAGE_KE | MUL_PAGE_R | MUL_PAGE_RW | MUL_PAGE_DEV);
     assert (hpet.addr);
     // Detect precision
     uint64_t genCap = pltHpetRead64 (PLT_HPET_GEN_CAP);

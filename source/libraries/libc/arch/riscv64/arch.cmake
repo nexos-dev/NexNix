@@ -1,5 +1,5 @@
 #[[
-    platform.cmake - contains platform CMake stuff
+    CMakeLists.txt - arch variable for libc build system
     Copyright 2024 The NexNix Project
 
     Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,6 +15,5 @@
     limitations under the License.
 ]]
 
-list(APPEND NEXKE_SOURCES
-    platform/sbsa/sbsa.c
-    platform/sbsa/pl011.c)
+list(APPEND LIBC_SOURCE_CRT0
+    arch/riscv64/crt0.S)

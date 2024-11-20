@@ -65,8 +65,8 @@ typedef struct _nkccb
 #define NEXKE_CPU_FAMILY_RISCV 3
 
 // Defined boards
-#define NEXKE_BOARD_PC   1
-#define NEXKE_BOARD_SBSA 2
+#define NEXKE_BOARD_PC      1
+#define NEXKE_BOARD_GENERIC 2
 
 // Initializes CPU control block
 void CpuInitCcb();

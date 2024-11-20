@@ -42,8 +42,8 @@ void CpuInitCcb()
     ccb.self = &ccb;
     ccb.cpuArch = NEXKE_CPU_ARMV8;
     ccb.cpuFamily = NEXKE_CPU_FAMILY_ARM;
-#ifdef NEXNIX_BOARD_SBSA
-    ccb.sysBoard = NEXKE_BOARD_SBSA;
+#ifdef NEXNIX_BOARD_GENERIC
+    ccb.sysBoard = NEXKE_BOARD_GENERIC;
 #else
 #error Unrecognized board
 #endif
@@ -117,8 +117,8 @@ void CpuInitCcb()
     uint64_t sctlr = CpuReadSpr ("SCTLR_EL1");
     sctlr &= ~(CPU_SCTLR_EL0_ENDIAN | CPU_SCTLR_UMA | CPU_SCTLR_WFI_EL0);
     // Set bits
-    sctlr |= (CPU_SCTLR_MMU_EN | CPU_SCTLR_ALIGN_CHK | CPU_SCTLR_CACHE | CPU_SCTLR_SP_ALIGN |
-              CPU_SCTLR_SP0_ALIGN | CPU_SCTLR_INST_CACHE);
+    sctlr |= (CPU_SCTLR_MMU_EN | CPU_SCTLR_CACHE | CPU_SCTLR_SP_ALIGN | CPU_SCTLR_SP0_ALIGN |
+              CPU_SCTLR_INST_CACHE);
     if (CpuGetFeatures() & CPU_FEATURE_NMI)
         sctlr |= (uint64_t) CPU_SCTLR_NMI;
     CpuWriteSpr ("SCTLR_EL1", sctlr);

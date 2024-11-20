@@ -159,7 +159,9 @@ typedef struct _madt
 #define ACPI_MADT_IOAPIC    1
 #define ACPI_MADT_ISO       2
 #define ACPI_MADT_X2APIC    9
-#define ACPI_MADT_MP_WAKEUP 16
+#define ACPI_MADT_GICC      0xB
+#define ACPI_MADT_GICD      0xC
+#define ACPI_MADT_MP_WAKEUP 0x10
 
 typedef struct _madtgen
 {
@@ -218,6 +220,45 @@ typedef struct _madtx2apic
     uint32_t flags;
     uint32_t uid;
 } __attribute__ ((packed)) AcpiX2Apic_t;
+
+// GIC CPU interface
+typedef struct _madtgicc
+{
+    uint8_t type;    // 0xB
+    uint8_t length;
+    uint16_t resvd;
+    uint32_t cpuNum;    // CPU number
+    uint32_t acpiUid;
+    uint32_t flags;
+    uint32_t parkVer;      // Parking protocol version
+    uint32_t perfGsivv;    // Performance GciV
+    uint64_t parkedAddr;
+    uint64_t physBase;    // Physical base address
+    uint64_t gicv;
+    uint64_t gich;
+    uint32_t vgicVector;
+    uint64_t gicrBase;
+    uint64_t mpidr;
+    uint8_t powerClass;
+    uint8_t resvd1;
+    uint32_t speGsiv;
+    uint32_t tbreGsiv;
+} __attribute__ ((packed)) AcpiGicc_t;
+
+#define ACPI_GICC_ENABLED    (1 << 0)
+#define ACPI_GICC_ONLINE_CAP (1 << 3)
+
+// GIC distributor
+typedef struct _madtgicd
+{
+    uint8_t type;    // 0xC
+    uint8_t length;
+    uint16_t resvd;
+    uint32_t gicId;    // ID of this distributor
+    uint64_t addr;
+    uint32_t gsiBase;
+    uint8_t version;
+} __attribute__ ((packed)) AcpiGicd_t;
 
 // MP Wakeup
 typedef struct _madtmpwakeup

@@ -194,6 +194,8 @@ static pte_t mmMulGetProt (int perm)
         pgFlags |= PF_CD;
     if (perm & MUL_PAGE_WT)
         pgFlags |= PF_WT;
+    if (perm & MUL_PAGE_DEV)
+        pgFlags |= PF_CD;
     if (perm & MUL_PAGE_WC)
     {
         if (CpuGetFeatures() & CPU_FEATURE_PAT)
@@ -486,7 +488,6 @@ void MmMulProtectPage (MmPage_t* page, int perm)
     }
     if (flushTlb)
         MmMulFlushTlb();
-    page->maps = NULL;
 }
 
 // Fixes a page in an address space
@@ -598,6 +599,8 @@ void MmMulMapEarly (uintptr_t virt, paddr_t phys, int flags)
         pgFlags |= PF_CD;
     if (flags & MUL_PAGE_WT)
         pgFlags |= PF_WT;
+    if (perm & MUL_PAGE_DEV)
+        pgFlags |= PF_CD;
     // Get indices
     uint32_t dirIdx = PG_ADDR_DIR (virt);
     uint32_t tabIdx = PG_ADDR_TAB (virt);

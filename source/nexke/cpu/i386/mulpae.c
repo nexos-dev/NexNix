@@ -170,6 +170,8 @@ static inline pte_t mmMulGetProt (int perm)
         pgFlags &= ~(PF_US);
     if (perm & MUL_PAGE_CD)
         pgFlags |= PF_CD;
+    if (perm & MUL_PAGE_DEV)
+        pgFlags |= PF_CD;
     if (perm & MUL_PAGE_WT)
         pgFlags |= PF_WT;
     if (perm & MUL_PAGE_X)
@@ -560,7 +562,6 @@ void MmMulProtectPage (MmPage_t* page, int perm)
         MM_MUL_UNLOCK (map->space);
         map = map->next;
     }
-    page->maps = NULL;
 }
 
 // Fixes a page in an address space
@@ -660,7 +661,8 @@ MmPage_t* MmMulGetMapping (MmSpace_t* space, uintptr_t virt)
     cacheEnt = MmPtabWalk (space, pdirAddr, virt);
     assert (cacheEnt);
     // Get PTE
-    pte_t* pte = (pte_t*) cacheEnt->addr;
+    pte_t* table = (pte_t*) cacheEnt->addr;
+    pte_t* pte = &table[MUL_IDX_LEVEL (virt, 1)];
     paddr_t addr = *pte & PT_FRAME;
     MmPtabReturnCache (cacheEnt);
     MM_MUL_UNLOCK (space);
@@ -708,6 +710,8 @@ void MmMulMapEarly (uintptr_t virt, paddr_t phys, int flags)
         pgFlags |= PF_CD;
     if (flags & MUL_PAGE_WT)
         pgFlags |= PF_WT;
+    if (perm & MUL_PAGE_DEV)
+        pgFlags |= PF_CD;
     // Get indices
     uint32_t pdptIdx = PG_ADDR_PDPT (virt);
     uint32_t dirIdx = PG_ADDR_DIR (virt);

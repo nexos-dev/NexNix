@@ -101,12 +101,6 @@ void MmMulInit()
 // Allocates page table into ent
 paddr_t MmMulAllocTable (MmSpace_t* space, uintptr_t addr, pte_t* stBase, pte_t* ent)
 {
-    // Figure out if this is a kernel address
-    bool isKernel = false;
-    if (MmMulIsKernel (addr))
-        isKernel = true;
-    else
-        isKernel = false;
     // Allocate the table
     MmPage_t* pg = MmAllocFixedPage();
     MmFixPage (pg);
@@ -117,7 +111,7 @@ paddr_t MmMulAllocTable (MmSpace_t* space, uintptr_t addr, pte_t* stBase, pte_t*
     NkListAddFront (&space->mulSpace.pageList, &pg->link);
     // Set PTE
     pte_t flags = PF_P | PF_RW;
-    if (!isKernel)
+    if (!MmMulIsKernel (addr))
         flags |= PF_US;
     // Map it
     *ent = tab | flags;
@@ -174,6 +168,8 @@ static inline pte_t mmMulGetProt (int perm)
         pgFlags &= ~(PF_US);
     if (perm & MUL_PAGE_CD)
         pgFlags |= PF_CD;
+    if (perm & MUL_PAGE_DEV)
+        pgFlags |= PF_CD;
     if (perm & MUL_PAGE_WT)
         pgFlags |= PF_WT;
     if (perm & MUL_PAGE_X)
@@ -216,6 +212,8 @@ void MmMulMapPage (MmSpace_t* space, uintptr_t virt, MmPage_t* page, int perm)
     // Create PTE
     pte_t newPte = pgFlags | (page->pfn * NEXKE_CPU_PAGESZ);
     // Grab page table of last entry
+    uintptr_t canonVirt = virt;
+    virt = mulDecanonical (virt);
     MmPtCacheEnt_t* cacheEnt = MmPtabWalkAndMap (space, mulSpace->base, virt, newPte);
     // Get table and PTE
     pte_t* table = (pte_t*) cacheEnt->addr;
@@ -249,7 +247,7 @@ void MmMulMapPage (MmSpace_t* space, uintptr_t virt, MmPage_t* page, int perm)
         // Set the PTE
         *pte = newPte;
         // Flush it
-        MmMulFlushAddr (space, virt);
+        MmMulFlushAddr (space, canonVirt);
     }
     else
     {
@@ -292,7 +290,7 @@ void MmMulMapPage (MmSpace_t* space, uintptr_t virt, MmPage_t* page, int perm)
         MmPageMap_t* map = (MmPageMap_t*) MmCacheAlloc (mulMapCache);
         if (!map)
             NkPanicOom();
-        map->addr = virt;
+        map->addr = canonVirt;
         map->space = space;
         map->next = NULL;
         // Link it
@@ -311,7 +309,7 @@ void MmMulUnmapRange (MmSpace_t* space, uintptr_t base, size_t count)
     MM_MUL_LOCK (space);
     // Set up iterator
     MmPtIter_t iter = {0};
-    iter.addr = base;
+    iter.addr = mulDecanonical (base);
     iter.space = space;
     iter.asPhys = space->mulSpace.base;
     for (int i = 0; i < count; ++i)
@@ -333,7 +331,7 @@ void MmMulUnmapRange (MmSpace_t* space, uintptr_t base, size_t count)
                 // Get page of PTE
                 MmPage_t* page = MmFindPagePfn ((*pte & PT_FRAME) >> NEXKE_CPU_PAGE_SHIFT);
                 *pte = 0;
-                MmMulFlushAddr (space, addr);
+                MmMulFlushAddr (space, mulMakeCanonical (addr));
                 // Now remove mapping, first we need to unlock the address space
                 // as we can't lock the page while holding the address space lock
                 // as that would violate lock ordering
@@ -345,7 +343,7 @@ void MmMulUnmapRange (MmSpace_t* space, uintptr_t base, size_t count)
                 MmPageMap_t* prev = NULL;
                 while (map)
                 {
-                    if (map->addr == addr && map->space == space)
+                    if (map->addr == mulMakeCanonical (addr) && map->space == space)
                     {
                         // Remove it and break
                         --space->stats.numMaps;
@@ -375,7 +373,7 @@ void MmMulProtectRange (MmSpace_t* space, uintptr_t base, size_t count, int perm
     pte_t flags = mmMulGetProt (perm);
     // Set up iterator
     MmPtIter_t iter = {0};
-    iter.addr = base;
+    iter.addr = mulDecanonical (base);
     iter.space = space;
     iter.asPhys = space->mulSpace.base;
     for (int i = 0; i < count; ++i)
@@ -393,7 +391,7 @@ void MmMulProtectRange (MmSpace_t* space, uintptr_t base, size_t count, int perm
             if (*pte & PF_P)
             {
                 *pte = (*pte & PT_FRAME) | flags | (*pte & PF_F);
-                MmMulFlushAddr (space, addr);
+                MmMulFlushAddr (space, mulMakeCanonical (addr));
             }
         }
     }
@@ -411,13 +409,14 @@ void MmMulUnmapPage (MmPage_t* page)
         // Lock MUL
         MM_MUL_LOCK (map->space);
         MmMulSpace_t* mulSpace = &map->space->mulSpace;
+        uint64_t addr = mulDecanonical (map->addr);
         // Get cache entry
-        MmPtCacheEnt_t* cacheEnt = MmPtabWalk (map->space, mulSpace->base, map->addr);
+        MmPtCacheEnt_t* cacheEnt = MmPtabWalk (map->space, mulSpace->base, addr);
         if (!cacheEnt)
             goto next;
         // Get PTE
         pte_t* table = (pte_t*) cacheEnt->addr;
-        pte_t* pte = &table[MUL_IDX_LEVEL (map->addr, 1)];
+        pte_t* pte = &table[MUL_IDX_LEVEL (addr, 1)];
         // Make sure it isn't fixed
         if (*pte & PF_F)
             NkPanic ("nexke: can't unmap fixed mapping");
@@ -447,13 +446,14 @@ void MmMulProtectPage (MmPage_t* page, int perm)
         // Lock MUL
         MM_MUL_LOCK (map->space);
         MmMulSpace_t* mulSpace = &map->space->mulSpace;
+        uint64_t addr = mulDecanonical (map->addr);
         // Get cache entry
-        MmPtCacheEnt_t* cacheEnt = MmPtabWalk (map->space, mulSpace->base, map->addr);
+        MmPtCacheEnt_t* cacheEnt = MmPtabWalk (map->space, mulSpace->base, addr);
         if (!cacheEnt)
             goto next;
         // Get PTE
         pte_t* table = (pte_t*) cacheEnt->addr;
-        pte_t* pte = &table[MUL_IDX_LEVEL (map->addr, 1)];
+        pte_t* pte = &table[MUL_IDX_LEVEL (addr, 1)];
         // Set flags
         *pte = (*pte & PT_FRAME) | flags | (*pte & PF_F);
         // Flush TLB if needed
@@ -464,7 +464,6 @@ void MmMulProtectPage (MmPage_t* page, int perm)
         MM_MUL_UNLOCK (map->space);
         map = map->next;
     }
-    page->maps = NULL;
 }
 
 // Fixes a page in an address space
@@ -478,13 +477,14 @@ void MmMulFixPage (MmPage_t* page)
         // Lock MUL
         MM_MUL_LOCK (map->space);
         MmMulSpace_t* mulSpace = &map->space->mulSpace;
+        uint64_t addr = mulDecanonical (map->addr);
         // Get cache entry
-        MmPtCacheEnt_t* cacheEnt = MmPtabWalk (map->space, mulSpace->base, map->addr);
+        MmPtCacheEnt_t* cacheEnt = MmPtabWalk (map->space, mulSpace->base, addr);
         if (!cacheEnt)
             goto next;
         // Get PTE
         pte_t* table = (pte_t*) cacheEnt->addr;
-        pte_t* pte = &table[MUL_IDX_LEVEL (map->addr, 1)];
+        pte_t* pte = &table[MUL_IDX_LEVEL (addr, 1)];
         if (*pte == 0)
             goto next;
         // Check if this is actually changing the attribute
@@ -510,13 +510,14 @@ void MmMulUnfixPage (MmPage_t* page)
         // Lock MUL
         MM_MUL_LOCK (map->space);
         MmMulSpace_t* mulSpace = &map->space->mulSpace;
+        uint64_t addr = mulDecanonical (map->addr);
         // Get cache entry
-        MmPtCacheEnt_t* cacheEnt = MmPtabWalk (map->space, mulSpace->base, map->addr);
+        MmPtCacheEnt_t* cacheEnt = MmPtabWalk (map->space, mulSpace->base, addr);
         if (!cacheEnt)
             goto next;
         // Get PTE
         pte_t* table = (pte_t*) cacheEnt->addr;
-        pte_t* pte = &table[MUL_IDX_LEVEL (map->addr, 1)];
+        pte_t* pte = &table[MUL_IDX_LEVEL (addr, 1)];
         if (*pte == 0)
             goto next;
         // Check if this is actually changing the attribute
@@ -539,7 +540,8 @@ MmPage_t* MmMulGetMapping (MmSpace_t* space, uintptr_t virt)
     MmPtCacheEnt_t* cacheEnt = MmPtabWalk (space, space->mulSpace.base, mulDecanonical (virt));
     assert (cacheEnt);
     // Get PTE
-    pte_t* pte = (pte_t*) cacheEnt->addr;
+    pte_t* table = (pte_t*) cacheEnt->addr;
+    pte_t* pte = &table[MUL_IDX_LEVEL (mulDecanonical (virt), 1)];
     paddr_t addr = *pte & PT_FRAME;
     MmPtabReturnCache (cacheEnt);
     MM_MUL_UNLOCK (space);
@@ -604,6 +606,8 @@ void MmMulMapEarly (uintptr_t virt, paddr_t phys, int flags)
         pgFlags |= PF_CD;
     if (flags & MUL_PAGE_WT)
         pgFlags |= PF_WT;
+    if (flags & MUL_PAGE_DEV)
+        pgFlags |= PF_CD;
     // Grab CR3
     pte_t* curSt = (pte_t*) CpuReadCr3();
     for (int i = mulMaxLevel; i > 1; --i)

@@ -36,8 +36,11 @@ static uint8_t idxShiftTab[] = {0, 12, 21, 30, 39, 48};
 #define PT_PG                  (1 << 1)
 #define PT_TAB                 (1 << 1)
 #define PT_RO                  (1 << 7)
-#define PT_XN                  (1 << 54)
+#define PT_XN                  ((1 << 54ULL) | (1 << 53ULL))
 #define PT_AF                  (1 << 10)
+#define PT_ISH                 (3 << 8)
+#define PT_OSH                 (2 << 8)
+#define PT_NSH                 (0 << 8)
 #define PT_FRAME               0xFFFFFFFFF000
 #define PT_GETFRAME(pt)        ((pt) & (PT_FRAME))
 #define PT_SETFRAME(pt, frame) ((pt) |= ((frame) & (PT_FRAME)))
@@ -153,7 +156,7 @@ bool NbCpuAsMap (uintptr_t virt, paddr_t phys, uint32_t flags)
 {
     uintptr_t ovirt = virt;
     // Translate flags to CPU dependent flags
-    uint64_t ptFlags = PT_V | PT_AF | PT_PG | PT_RO;
+    uint64_t ptFlags = PT_V | PT_AF | PT_PG | PT_RO | PT_OSH;
     if (flags & NB_CPU_AS_RW)
         ptFlags &= ~(PT_RO);
     if (flags & NB_CPU_AS_WT)
@@ -192,7 +195,7 @@ bool NbCpuAsMap (uintptr_t virt, paddr_t phys, uint32_t flags)
     // Map it
     *lastEnt = phys | ptFlags;
     // Invalidate TLB
-    asm volatile ("dsb ishst; tlbi vae1, %0" : : "r"(ovirt >> 12));
+    asm volatile ("dsb ishst; tlbi vaae1is, %0" : : "r"(ovirt >> 12));
     return true;
 }
 
@@ -214,7 +217,7 @@ void NbCpuAsUnmap (uintptr_t virt)
     // Grab last PML entry
     pte_t* lastEnt = cpuAsGetEntry (curSt, virt, 1);
     *lastEnt = 0;    // Unmap
-    asm volatile ("dsb ishst; tlbi vae1, %0" : : "r"(ovirt >> 12));
+    asm volatile ("dsb ishst; tlbi vaae1is, %0" : : "r"(ovirt >> 12));
 }
 
 // Enables paging

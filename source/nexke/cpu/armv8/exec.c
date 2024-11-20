@@ -85,11 +85,75 @@ void CpuGetExecInf (CpuExecInf_t* out, NkInterrupt_t* intObj, CpuIntContext_t* c
     out->name = cpuExecNameTable[intObj->vector];
 }
 
+// Data abort handler
+bool CpuDataAbort (NkInterrupt_t* intObj, CpuIntContext_t* ctx)
+{
+    // Get ISS
+    uint32_t iss = CpuReadSpr ("ESR_EL1") & CPU_ESR_ISS_MASK;
+    int dfsc = iss & CPU_DA_DFSC_MASK;
+    if (CPU_IS_AS_FAULT (dfsc))
+        return false;    // No way to handle an address fault
+    else if (CPU_IS_TRAN_FAULT (dfsc))
+    {
+        int errCode = (iss & CPU_DA_WNR) ? MUL_PAGE_RW : 0;
+        errCode |= MUL_PAGE_P;
+        uintptr_t addr = CpuReadSpr ("FAR_EL1");
+        return MmPageFault (addr, errCode);
+    }
+    else if (CPU_IS_PERM_FAULT (dfsc))
+    {
+        int errCode = (iss & CPU_DA_WNR) ? MUL_PAGE_RW : 0;
+        uintptr_t addr = CpuReadSpr ("FAR_EL1");
+        return MmPageFault (addr, errCode);
+    }
+    else if (CPU_IS_AF_FAULT (dfsc))
+    {
+        uintptr_t addr = CpuReadSpr ("FAR_EL1");
+        MmMulSetAttr (MmGetCurrentSpace(), addr, MUL_ATTR_ACCESS, true);
+        return true;
+    }
+    else
+        return false;
+}
+
+// Instruction abort handler
+bool CpuInsnAbort (NkInterrupt_t* intObj, CpuIntContext_t* ctx)
+{
+    // Get ISS
+    uint32_t iss = CpuReadSpr ("ESR_EL1") & CPU_ESR_ISS_MASK;
+    int ifsc = iss & CPU_IA_IFSC_MASK;
+    if (CPU_IS_AS_FAULT (ifsc))
+        return false;    // No way to handle an address fault
+    else if (CPU_IS_TRAN_FAULT (ifsc))
+    {
+        int errCode = MUL_PAGE_X;
+        uintptr_t addr = CpuReadSpr ("FAR_EL1");
+        return MmPageFault (addr, errCode);
+    }
+    else if (CPU_IS_PERM_FAULT (ifsc))
+    {
+        int errCode = MUL_PAGE_P | MUL_PAGE_X;
+        uintptr_t addr = CpuReadSpr ("FAR_EL1");
+        return MmPageFault (addr, errCode);
+    }
+    else if (CPU_IS_AF_FAULT (ifsc))
+    {
+        // Set access flag
+        return false;
+    }
+    else
+        return false;
+}
+
 // Registers exception handlers
 void CpuRegisterExecs()
 {
     for (int i = 0; i < CPU_EC_NUM; ++i)
     {
+        if (i == CPU_EC_DA_LOW_EL || i == CPU_EC_DA_CUR_EL)
+            PltInstallExec (i, CpuDataAbort);
+        else if (i == CPU_EC_IA_LOW_EL || i == CPU_EC_IA_CUR_EL)
+            PltInstallExec (i, CpuInsnAbort);
         PltInstallExec (i, NULL);
     }
 }

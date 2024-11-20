@@ -445,7 +445,7 @@ then
         then
             rm -rf $NNEXTSOURCEROOT/tools/u-boot
             cd $NNEXTSOURCEROOT/tools
-            git clone https://source.denx.de/u-boot/u-boot.git -b v2023 - 2024.10
+            git clone https://source.denx.de/u-boot/u-boot.git -b v2024.10
             checkerr $? "unable to download U-Boot"
         fi
     fi

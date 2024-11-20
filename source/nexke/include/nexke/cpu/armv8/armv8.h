@@ -336,6 +336,19 @@ extern uint8_t CpuVectorTable[];
 #define CPU_EC_PMU           61
 #define CPU_EC_NUM           64
 
+// Data abort ISS
+#define CPU_DA_ISV       (1 << 24)
+#define CPU_DA_WNR       (1 << 6)
+#define CPU_DA_DFSC_MASK 0x3F
+
+// Instruction abort ISS
+#define CPU_IA_IFSC_MASK 0x3F
+
+#define CPU_IS_AS_FAULT(fsc)   ((fsc) == 0 || (fsc) == 1 || (fsc) == 2 || (fsc) == 3)
+#define CPU_IS_TRAN_FAULT(fsc) ((fsc) == 4 || (fsc) == 5 || (fsc) == 6 || (fsc) == 7)
+#define CPU_IS_AF_FAULT(fsc)   ((fsc) == 9 || (fsc) == 10 || (fsc) == 11 || (fsc) == 8)
+#define CPU_IS_PERM_FAULT(fsc) ((fsc) == 12 || (fsc) == 13 || (fsc) == 14 || (fsc) == 15)
+
 // SCTLR
 #define CPU_SCTLR_MMU_EN     (1 << 0)
 #define CPU_SCTLR_ALIGN_CHK  (1 << 1)

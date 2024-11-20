@@ -565,7 +565,7 @@ int PltApicGetRedirs (paddr_t base)
     volatile uint32_t* apic =
         (volatile uint32_t*) MmAllocKvMmio (base,
                                             2,
-                                            MUL_PAGE_KE | MUL_PAGE_R | MUL_PAGE_RW | MUL_PAGE_CD);
+                                            MUL_PAGE_KE | MUL_PAGE_R | MUL_PAGE_RW | MUL_PAGE_DEV);
     assert (apic);
     *(apic) = PLT_IOAPIC_VER;
     uint32_t ver = *(apic + 4);
@@ -617,7 +617,7 @@ static bool pltLapicInit()
         return false;    // APIC doesn't exist
     // Get APIC base
     apicBase =
-        MmAllocKvMmio (PLT_APIC_BASE, 1, MUL_PAGE_CD | MUL_PAGE_RW | MUL_PAGE_R | MUL_PAGE_KE);
+        MmAllocKvMmio (PLT_APIC_BASE, 1, MUL_PAGE_DEV | MUL_PAGE_RW | MUL_PAGE_R | MUL_PAGE_KE);
     // Enable it in the MSR
     uint64_t apicBase = CpuRdmsr (PLT_APIC_BASE_MSR);
     apicBase |= PLT_APIC_MSR_ENABLE;
@@ -710,7 +710,7 @@ PltHwIntCtrl_t* PltApicInit()
             numPages = 2;
         ioapic->addr = MmAllocKvMmio (cur->addr,
                                       numPages,
-                                      MUL_PAGE_KE | MUL_PAGE_R | MUL_PAGE_RW | MUL_PAGE_CD);
+                                      MUL_PAGE_KE | MUL_PAGE_R | MUL_PAGE_RW | MUL_PAGE_DEV);
         ioapic->gsiBase = cur->gsiBase;
         ioapic->id = pltIoApicRead (ioapic, PLT_IOAPIC_ID) >> 24;
         // Get number of redirection entries and mask them

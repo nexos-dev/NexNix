@@ -1,5 +1,5 @@
-/*
-    sbsa.h - contains SBSA specific things
+#[[
+    platform.cmake - contains platform CMake stuff
     Copyright 2024 The NexNix Project
 
     Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,13 +13,13 @@
     WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
     See the License for the specific language governing permissions and
     limitations under the License.
-*/
+]]
 
-#ifndef _SBSA_H
-#define _SBSA_H
+list(APPEND NEXKE_SOURCES
+    platform/generic/detect.c)
 
-#include <nexke/platform/acpi.h>
-
-bool PltPL011Init (AcpiGas_t* gas);
-
-#endif
+if(NEXNIX_BASEARCH STREQUAL "arm")
+    list(APPEND NEXKE_SOURCES 
+         platform/generic/arch/arm/gic.c
+         platform/generic/arch/arm/pl011.c)
+endif()

@@ -317,14 +317,15 @@ bool MmPageFaultIn (MmObject_t* obj, size_t offset, int* prot, MmPage_t** page);
 // MUL basic interfaces
 
 // MUL page flags
-#define MUL_PAGE_R  (1 << 0)
-#define MUL_PAGE_RW (1 << 1)
-#define MUL_PAGE_KE (1 << 2)
-#define MUL_PAGE_X  (1 << 3)
-#define MUL_PAGE_CD (1 << 4)
-#define MUL_PAGE_WT (1 << 5)
-#define MUL_PAGE_P  (1 << 6)
-#define MUL_PAGE_WC (1 << 7)
+#define MUL_PAGE_R   (1 << 0)
+#define MUL_PAGE_RW  (1 << 1)
+#define MUL_PAGE_KE  (1 << 2)
+#define MUL_PAGE_X   (1 << 3)
+#define MUL_PAGE_CD  (1 << 4)
+#define MUL_PAGE_WT  (1 << 5)
+#define MUL_PAGE_P   (1 << 6)
+#define MUL_PAGE_WC  (1 << 7)
+#define MUL_PAGE_DEV (1 << 8)
 
 // Initializes MUL
 void MmMulInit();
@@ -363,6 +364,22 @@ MmPage_t* MmMulGetMapping (MmSpace_t* space, uintptr_t virt);
 
 // Zeroes a page with the MUL
 void MmMulZeroPage (MmPage_t* page);
+
+// Page attributes
+#define MUL_ATTR_ACCESS 0
+#define MUL_ATTR_DIRTY  1
+
+// Gets attributes of page
+bool MmMulGetAttrPage (MmPage_t* page, int attr);
+
+// Sets attribute to value of page
+bool MmMulSetAttrPage (MmPage_t* page, int attr, bool val);
+
+// Gets attribute of address
+bool MmMulGetAttr (MmSpace_t* space, uintptr_t addr, int attr);
+
+// Sets attribute of address
+void MmMulSetAttr (MmSpace_t* space, uintptr_t addr, int attr, bool val);
 
 // Creates an MUL address space
 void MmMulCreateSpace (MmSpace_t* space);

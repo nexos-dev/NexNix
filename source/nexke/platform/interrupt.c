@@ -155,6 +155,11 @@ NkInterrupt_t* PltInstallExec (int vector, PltIntHandler hndlr)
         return NULL;    // Can't cross into hardware vectors
     CpuDisable();
     NkInterrupt_t* obj = pltAllocInterrupt (vector, PLT_INT_EXEC);
+    if (!obj)
+    {
+        CpuEnable();
+        return NULL;
+    }
     obj->handler = hndlr;
     CpuEnable();
     return obj;
@@ -168,6 +173,11 @@ NkInterrupt_t* PltInstallSvc (int vector, PltIntHandler hndlr)
         return NULL;    // Can't cross into hardware vectors
     CpuDisable();
     NkInterrupt_t* obj = pltAllocInterrupt (vector, PLT_INT_SVC);
+    if (!obj)
+    {
+        CpuEnable();
+        return NULL;
+    }
     obj->handler = hndlr;
     CpuEnable();
     return obj;

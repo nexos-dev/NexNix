@@ -18,7 +18,7 @@
 #include <nexke/mm.h>
 #include <nexke/nexke.h>
 #include <nexke/platform.h>
-#include <nexke/platform/sbsa.h>
+#include <nexke/platform/generic.h>
 #include <stdlib.h>
 
 // Register offsets
@@ -91,7 +91,7 @@ bool PltPL011Init (AcpiGas_t* gas)
         return false;
     uintptr_t pl011Phys = gas->addr;
     // Map it
-    MmMulMapEarly (pl011Base, pl011Phys, MUL_PAGE_KE | MUL_PAGE_R | MUL_PAGE_RW | MUL_PAGE_CD);
+    MmMulMapEarly (pl011Base, pl011Phys, MUL_PAGE_KE | MUL_PAGE_R | MUL_PAGE_RW | MUL_PAGE_DEV);
     // Get SPCR
     AcpiSpcr_t* spcr = (AcpiSpcr_t*) PltAcpiFindTableEarly ("SPCR");
     if (!spcr)

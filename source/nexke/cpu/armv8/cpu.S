@@ -25,6 +25,19 @@ CpuCrash:
 .global MmMulFlush
 
 MmMulFlush:
+    lsr x0, x0, #12
+    dsb ishst
+    tlbi vaae1is, x0
+    ret
+
+.global MmMulFlushTlb
+
+MmMulFlushTlb:
+    dsb ishst
+    tlbi vmalle1
+    dsb ish
+    isb
+    ret
 
 // Performs a context switch
 // Very critical code path

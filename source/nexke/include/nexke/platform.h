@@ -254,16 +254,18 @@ PltHwTimer_t* PltInitTimer();
 
 typedef struct _hwcpu
 {
-    int id;      // ID according to platform
-    int type;    // CPU interrupt controller type
+    int id;           // ID according to platform
+    int type;         // CPU interrupt controller type
+    uint64_t addr;    // Address of interrupt controller
     NkLink_t link;
 } PltCpu_t;
 
-static const char* pltCpuTypes[] = {"APIC", "x2APIC", "none"};
+static const char* pltCpuTypes[] = {"APIC", "x2APIC", "none", "GIC"};
 
 #define PLT_CPU_APIC   0
 #define PLT_CPU_X2APIC 1
 #define PLT_CPU_UP     2    // CPU has no embedded interrupt controller
+#define PLT_CPU_GIC    3
 
 // Interrupt overrides
 typedef struct _hwintsrc
@@ -292,10 +294,11 @@ typedef struct _hwintctl
     NkLink_t link;
 } PltIntCtrl_t;
 
-static const char* pltIntCtrlTypes[] = {"IOAPIC", "8259A"};
+static const char* pltIntCtrlTypes[] = {"IOAPIC", "8259A", "GIC"};
 
 #define PLT_INTCTRL_IOAPIC 0
 #define PLT_INTCTRL_8259A  1
+#define PLT_INTCTRL_GIC    2
 
 // Platform structure
 typedef struct _nkplt
@@ -320,8 +323,8 @@ typedef struct _nkplt
     spinlock_t acpiCacheLock;
 } NkPlatform_t;
 
-#define PLT_TYPE_PC   1
-#define PLT_TYPE_SBSA 2
+#define PLT_TYPE_PC      1
+#define PLT_TYPE_GENERIC 2
 
 #define PLT_PC_SUBTYPE_ACPI 1
 #define PLT_PC_SUBTYPE_MPS  2

@@ -301,6 +301,7 @@ bool PltAcpiDetectCpus()
                 PltCpu_t* cpu = MmCacheAlloc (cpuCache);
                 cpu->id = lapic->id;
                 cpu->type = PLT_CPU_APIC;
+                cpu->addr = (uintptr_t) madt->localBase;
                 PltAddCpu (cpu);
             }
         }
@@ -313,6 +314,7 @@ bool PltAcpiDetectCpus()
                 PltCpu_t* cpu = MmCacheAlloc (cpuCache);
                 cpu->id = lapic->id;
                 cpu->type = PLT_CPU_X2APIC;
+                cpu->addr = (uintptr_t) madt->localBase;
                 PltAddCpu (cpu);
             }
         }
@@ -362,6 +364,28 @@ bool PltAcpiDetectCpus()
             }
             PltAddInterrupt (intSrc);
         }
+        else if (cur->type == ACPI_MADT_GICC)
+        {
+            AcpiGicc_t* gicc = (AcpiGicc_t*) cur;
+            PltCpu_t* cpu = MmCacheAlloc (cpuCache);
+            cpu->id = gicc->cpuNum;
+            cpu->type = PLT_CPU_GIC;
+            if (gicc->physBase)
+                cpu->addr = gicc->physBase;
+            else
+                cpu->addr = (uint32_t) madt->localBase;
+            PltAddCpu (cpu);
+        }
+        else if (cur->type == ACPI_MADT_GICD)
+        {
+            AcpiGicd_t* gicd = (AcpiGicd_t*) cur;
+            PltIntCtrl_t* intCtrl = MmCacheAlloc (intCtrlCache);
+            intCtrl->addr = gicd->addr;
+            intCtrl->id = gicd->gicId;
+            intCtrl->gsiBase = gicd->gsiBase;
+            intCtrl->type = PLT_INTCTRL_GIC;
+            PltAddIntCtrl (intCtrl);
+        }
         // To next entry
         i += cur->length;
         cur = (void*) cur + cur->length;
@@ -398,7 +422,7 @@ static uint64_t pltAcpiMapReg (AcpiGas_t* gas)
     {
         return (uint64_t) MmAllocKvMmio ((paddr_t) gas->addr,
                                          1,
-                                         MUL_PAGE_KE | MUL_PAGE_R | MUL_PAGE_CD | MUL_PAGE_RW);
+                                         MUL_PAGE_KE | MUL_PAGE_R | MUL_PAGE_DEV | MUL_PAGE_RW);
     }
     else if (gas->asId == ACPI_GAS_IO)
         return gas->addr;

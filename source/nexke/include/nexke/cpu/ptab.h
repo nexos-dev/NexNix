@@ -47,18 +47,18 @@ typedef struct _pteiter
     MmSpace_t* space;    // Address space we are iterating in
     paddr_t asPhys;      // Address space physical base
     MmPtCacheEnt_t* asCache;
-    MmPtIterTable_t ptIters[MM_PTAB_MAX_LEVEL];
+    MmPtIterTable_t ptIters[MM_PTAB_MAX_LEVEL + 1];
 } MmPtIter_t;
 
 #define MM_PTAB_UNCACHED 0
 
 typedef struct _mmspace
 {
-    paddr_t base;                                     // Physical base of top level table
-    MmPtCacheEnt_t* ptFreeList;                       // List of free PT cache entries
-    MmPtCacheEnt_t* ptLists[MM_PTAB_MAX_LEVEL];       // List of in use entries for each level
-    MmPtCacheEnt_t* ptListsEnd[MM_PTAB_MAX_LEVEL];    // List tails for each levels
-    bool tlbUpdatePending;                            // Is a TLB update pending?
+    paddr_t base;                                         // Physical base of top level table
+    MmPtCacheEnt_t* ptFreeList;                           // List of free PT cache entries
+    MmPtCacheEnt_t* ptLists[MM_PTAB_MAX_LEVEL + 1];       // List of in use entries for each level
+    MmPtCacheEnt_t* ptListsEnd[MM_PTAB_MAX_LEVEL + 1];    // List tails for each levels
+    bool tlbUpdatePending;                                // Is a TLB update pending?
                               // Used to lazily update the TLB on CPUs where that is slow
     int freeCount;        // Free number of cache entries
     NkList_t pageList;    // Page table pages

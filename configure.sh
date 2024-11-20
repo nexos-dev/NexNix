@@ -343,13 +343,13 @@ ispae=
 isla57=
 
 # Target list
-targets="i386-pc x86_64-pc armv8-sbsa riscv64-generic"
+targets="i386-pc x86_64-pc armv8-generic riscv64-generic"
 # Valid image types
 imagetypes="mbr gpt iso9660"
 # Target configuration list
 confs_i386_pc="pnp mp acpi-up acpi"
 confs_x86_64_pc="acpi acpi-up"
-confs_armv8_sbsa="sbsa sbsa-up"
+confs_armv8_generic="sbsa sbsa-up"
 confs_riscv64_generic="rvefi rvefi-up"
 
 # Loop through every argument
@@ -441,8 +441,8 @@ HELPEND
         echo "Default configuration for i386-pc is: acpi"
         echo "Valid configurations for x86_64-pc: $confs_x86_64_pc"
         echo "Default configuration for x86_64-pc is: acpi"
-        echo "Valid configurations for armv8-sbsa: $confs_armv8_sbsa"
-        echo "Default configuration for armv8-sbsa is: sbsa"
+        echo "Valid configurations for armv8-generic: $confs_armv8_generic"
+        echo "Default configuration for armv8-generic is: generic"
         exit 0
         ;;
     -debug)
@@ -937,7 +937,7 @@ Run $0 -archs to see supported targets"
         then
             findprog "x86_64-linux-gnu-gcc"
         fi
-    elif [ "$target" = "armv8-sbsa" ]
+    elif [ "$target" = "armv8-generic" ]
     then
         commonarch="arm"
         efiarch="AA64"
@@ -946,7 +946,7 @@ Run $0 -archs to see supported targets"
             tarconf="sbsa"
         else
             conffound=0
-            for tconf in $confs_armv8_sbsa
+            for tconf in $confs_armv8_generic
             do
                 if [ "$tconf" = "$tarconf" ]
                 then
