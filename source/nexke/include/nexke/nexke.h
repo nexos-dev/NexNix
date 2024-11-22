@@ -281,4 +281,15 @@ static inline uintptr_t NkAlignDown (uintptr_t ptr, uintptr_t align)
     return ptr & ~(align - 1);
 }
 
+// Get highest bit in number
+static inline int NkGetHighBit (long val)
+{
+    for (int i = 0; i < sizeof (long) * 8; ++i)
+    {
+        if (val & (1 << i))
+            return i;
+    }
+    return -1;
+}
+
 #endif

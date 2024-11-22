@@ -149,6 +149,17 @@ PltIntOverride_t* PltGetOverride (uint32_t gsi)
     return NULL;
 }
 
+// Initializes system inerrupt controller
+PltHwIntCtrl_t* PltInitHwInts()
+{
+#ifdef NEXNIX_BASEARCH_ARM
+    PltHwIntCtrl_t* ctrl = PltGicInit();
+    if (!ctrl)
+        NkPanic ("nexke: can't find interrupt controller");
+    nkPlatform.intCtrl = ctrl;
+#endif
+}
+
 void PltInitPhase2()
 {
     PltInitInterrupts();
@@ -160,6 +171,8 @@ void PltInitPhase3()
         NkFbConsFbRemap();
     if (!PltAcpiDetectCpus())
         NkPanic ("nexke: CPU detection failed\n");
+    // Initialize interrupt controller for architecture
+    PltInitHwInts();
 }
 
 // Returns platform

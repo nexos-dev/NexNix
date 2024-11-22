@@ -49,9 +49,10 @@ NkConsole_t* PltGetSecondaryCons();
 // Interrupt manager
 
 // IPLs
-#define PLT_IPL_LOW   0
-#define PLT_IPL_TIMER 32
-#define PLT_IPL_HIGH  33
+#define PLT_IPL_LOW      0
+#define PLT_IPL_TIMER    32
+#define PLT_IPL_HIGH     33
+#define PLT_IPL_NUM_PRIO 32
 
 // Function pointer types for below
 typedef bool (*PltHwBeginInterrupt) (NkCcb_t*, int vector);
@@ -61,6 +62,7 @@ typedef void (*PltHwEnableInterrupt) (NkCcb_t*, NkHwInterrupt_t*);
 typedef void (*PltHwSetIpl) (NkCcb_t*, ipl_t);
 typedef int (*PltHwConnectInterrupt) (NkCcb_t*, NkHwInterrupt_t*);
 typedef void (*PltHwDisconnectInterrupt) (NkCcb_t*, NkHwInterrupt_t*);
+typedef int (*PltHwGetVector) (NkCcb_t*);
 
 // Interupt chain structure
 typedef struct _intchain
@@ -85,11 +87,13 @@ typedef struct _hwintctrl
     PltHwSetIpl setIpl;
     PltHwConnectInterrupt connectInterrupt;
     PltHwDisconnectInterrupt disconnectInterrupt;
+    PltHwGetVector getVector;
 } PltHwIntCtrl_t;
 
 // Valid controller types
 #define PLT_HWINT_8259A 1
 #define PLT_HWINT_APIC  2
+#define PLT_HWINT_GIC   3
 
 // Initializes system inerrupt controller
 PltHwIntCtrl_t* PltInitHwInts();

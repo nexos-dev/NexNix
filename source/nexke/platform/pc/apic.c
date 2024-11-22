@@ -23,6 +23,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+// TODO: SMP and X2APIC
+
 // For disabing to 8259A
 #define PLT_PIC_MASTER_DATA 0x21
 #define PLT_PIC_SLAVE_DATA  0xA1
@@ -444,6 +446,11 @@ static bool PltApicBeginInterrupt (NkCcb_t* ccb, int vector)
     return true;
 }
 
+static int PltApicGetVector (NkCcb_t* ccb)
+{
+    return -1;
+}
+
 static void PltApicEndInterrupt (NkCcb_t* ccb, int vector)
 {
     pltLapicWrite (PLT_LAPIC_EOI, 0);    // Send EOI
@@ -530,7 +537,10 @@ static int PltApicConnectInterrupt (NkCcb_t* ccb, NkHwInterrupt_t* intObj)
     else
     {
         if (!pltApicMapInterrupt (intObj))
+        {
+            NkSpinUnlock (&curChain->lock);
             return -1;
+        }
     }
     // Set remappable flag
     if (intObj->flags & PLT_HWINT_FORCE_IPL)
@@ -580,7 +590,8 @@ PltHwIntCtrl_t pltApic = {.type = PLT_HWINT_APIC,
                           .disconnectInterrupt = PltApicDisconnectInterrupt,
                           .enableInterrupt = PltApicEnableInterrupt,
                           .endInterrupt = PltApicEndInterrupt,
-                          .setIpl = PltApicSetIpl};
+                          .setIpl = PltApicSetIpl,
+                          .getVector = PltApicGetVector};
 
 static void pltApicSetCallback (void (*cb)())
 {

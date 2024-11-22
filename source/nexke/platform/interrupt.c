@@ -224,14 +224,22 @@ NkInterrupt_t* PltRemapInterrupt (NkInterrupt_t* oldInt, int newVector, ipl_t ne
 {
     assert (newVector < NK_MAX_INTS);
     assert (oldInt->type == PLT_INT_HWINT);
-    // Allocate the new vector
-    NkInterrupt_t* newInt = pltAllocInterrupt (newVector, PLT_INT_HWINT);
-    if (!newInt)
-        return NULL;
-    // Move the chain
-    newInt->intChain = oldInt->intChain;
+    // Allocate the new vector if these is a new one
+    NkInterrupt_t* newInt = NULL;
+    if (oldInt->vector != newVector)
+    {
+        newInt = pltAllocInterrupt (newVector, PLT_INT_HWINT);
+        if (!newInt)
+            return NULL;
+        // Move the chain
+        newInt->intChain = oldInt->intChain;
+        // Uninstall the old interrupt
+        PltUninstallInterrupt (oldInt);
+    }
+    else
+        newInt = oldInt;
     // Change vector and IPL on all the interrupts
-    NkLink_t* iter = NkListFront (&oldInt->intChain->list);
+    NkLink_t* iter = NkListFront (&newInt->intChain->list);
     while (iter)
     {
         NkHwInterrupt_t* curInt = LINK_CONTAINER (iter, NkHwInterrupt_t, link);
@@ -239,8 +247,6 @@ NkInterrupt_t* PltRemapInterrupt (NkInterrupt_t* oldInt, int newVector, ipl_t ne
         curInt->ipl = newIpl;
         iter = NkListIterate (iter);
     }
-    // Uninstall the old interrupt
-    PltUninstallInterrupt (oldInt);
     return newInt;
 }
 

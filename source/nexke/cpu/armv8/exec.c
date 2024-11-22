@@ -22,6 +22,8 @@
 #include <nexke/platform.h>
 #include <string.h>
 
+static PltHwIntCtrl_t* intCtrl = NULL;    // Interupt controller
+
 // Exception name table
 static const char* cpuExecNameTable[] = {[CPU_EC_UNKNOWN] = "unknown exception",
                                          [CPU_EC_TRAPPED_WF] = "trapped WFI/WFE",
@@ -70,6 +72,10 @@ int CpuGetIntNum (CpuIntContext_t* ctx)
         uint64_t esr = CpuReadSpr ("ESR_EL1");
         // Get exception code
         code = (esr >> CPU_ESR_EC_SHIFT) & CPU_ESR_EC_MASK;
+    }
+    else if (CPU_IS_IRQ (ctx->handler))
+    {
+        code = intCtrl->getVector (CpuGetCcb());
     }
     else
         assert (0);
@@ -138,8 +144,9 @@ bool CpuInsnAbort (NkInterrupt_t* intObj, CpuIntContext_t* ctx)
     }
     else if (CPU_IS_AF_FAULT (ifsc))
     {
-        // Set access flag
-        return false;
+        uintptr_t addr = CpuReadSpr ("FAR_EL1");
+        MmMulSetAttr (MmGetCurrentSpace(), addr, MUL_ATTR_ACCESS, true);
+        return true;
     }
     else
         return false;
@@ -156,4 +163,5 @@ void CpuRegisterExecs()
             PltInstallExec (i, CpuInsnAbort);
         PltInstallExec (i, NULL);
     }
+    intCtrl = PltGetPlatform()->intCtrl;
 }

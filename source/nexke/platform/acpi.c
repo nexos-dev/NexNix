@@ -244,8 +244,8 @@ AcpiSdt_t* PltAcpiFindTableEarly (const char* sig)
     // Get RSDP
     AcpiRsdp_t* rsdp = (AcpiRsdp_t*) boot->comps[NB_TABLE_ACPI];
     bool isAcpi2 = (rsdp->rev > 1) ? true : false;
-    AcpiSdt_t* rsdt = (AcpiSdt_t*) rsdp->rsdtAddr;
-    AcpiSdt_t* xsdt = (AcpiSdt_t*) rsdp->xsdtAddr;
+    AcpiSdt_t* rsdt = (AcpiSdt_t*) ((uintptr_t) rsdp->rsdtAddr);
+    AcpiSdt_t* xsdt = (AcpiSdt_t*) ((uintptr_t) rsdp->xsdtAddr);
     // Check wheter to look through XSDT or RSDT
     if (isAcpi2 && xsdt)
     {
@@ -289,6 +289,7 @@ bool PltAcpiDetectCpus()
         return false;
     uint32_t len = madt->sdt.length - sizeof (AcpiMadt_t);
     AcpiMadtEntry_t* cur = (AcpiMadtEntry_t*) (madt + 1);
+    uintptr_t intCtrlBase = 0;    // To make sure all interrupt controllers are at the same base
     for (int i = 0; i < len;)
     {
         // See what this is
@@ -372,8 +373,17 @@ bool PltAcpiDetectCpus()
             cpu->type = PLT_CPU_GIC;
             if (gicc->physBase)
                 cpu->addr = gicc->physBase;
-            else
+            else if (madt->localBase)
                 cpu->addr = (uint32_t) madt->localBase;
+            else
+                continue;
+            if (!intCtrlBase)
+                intCtrlBase = cpu->addr;
+            else
+            {
+                if (intCtrlBase != cpu->addr)
+                    NkLogWarning ("nexke: not all GICCs at same base, system may fail\n");
+            }
             PltAddCpu (cpu);
         }
         else if (cur->type == ACPI_MADT_GICD)

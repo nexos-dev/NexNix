@@ -1,5 +1,5 @@
 /*
-    generic.h - contains GENERIC specific things
+    generic.h - contains generic board specific things
     Copyright 2024 The NexNix Project
 
     Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,8 +18,10 @@
 #ifndef _GENERIC_H
 #define _GENERIC_H
 
+#include <nexke/platform.h>
 #include <nexke/platform/acpi.h>
 
 bool PltPL011Init (AcpiGas_t* gas);
+PltHwIntCtrl_t* PltGicInit();
 
 #endif
