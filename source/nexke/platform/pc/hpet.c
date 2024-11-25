@@ -85,6 +85,7 @@ typedef struct _hpet
 } pltHpet_t;
 
 static pltHpet_t hpet = {0};
+static NkHwInterrupt_t hpetInt = {0};
 
 // Forward declarations of clock and timer
 extern PltHwClock_t pltHpetClock;
@@ -161,8 +162,8 @@ static bool PltHpetDispatch (NkInterrupt_t* intObj, CpuIntContext_t* ctx)
     }
     else
     {
-        if (pltHpetTimer.callback)
-            pltHpetTimer.callback();    // Call the callback
+        // Call handler
+        NkTimeHandler();
     }
     // Clear timer 0 interrupt
     pltHpetWrite64 (PLT_HPET_INT_STATUS, (1 << 0));
@@ -217,15 +218,6 @@ static ktime_t PltHpetGetTime()
     return pltFromHpetTime (pltHpetGetCount());
 }
 
-// Sets timer callback
-static void PltHpetSetCb (void (*cb)())
-{
-    pltHpetTimer.callback = cb;
-}
-
-// Called by us if arming skipped the deadline
-extern void NkTimeHandler();
-
 // Arms timer
 static void PltHpetArmTimer (ktime_t delta)
 {
@@ -276,9 +268,7 @@ PltHwClock_t pltHpetClock = {.type = PLT_CLOCK_HPET,
                              .getTime = PltHpetGetTime,
                              .poll = PltHpetPoll};
 
-PltHwTimer_t pltHpetTimer = {.type = PLT_TIMER_HPET,
-                             .armTimer = PltHpetArmTimer,
-                             .setCallback = PltHpetSetCb};
+PltHwTimer_t pltHpetTimer = {.type = PLT_TIMER_HPET, .armTimer = PltHpetArmTimer};
 
 // HPET clock initialization function
 PltHwClock_t* PltHpetInitClock()
@@ -371,20 +361,16 @@ PltHwTimer_t* PltHpetInitTimer()
                 PLT_HPET_TIMER_INT;    // We want level trigerred since they're more robust
     pltHpetTimerWrite (0, PLT_HPET_TIMER_CONF, timerCnf);
     // Install the interrupt
-    NkHwInterrupt_t* intObj = PltAllocHwInterrupt();
-    intObj->mode = PLT_MODE_LEVEL;
-    intObj->gsi = line;
-    intObj->ipl = PLT_IPL_TIMER;
-    intObj->flags = 0;
-    intObj->handler = PltHpetDispatch;
-    int vector = PltConnectInterrupt (intObj);
-    if (vector == -1)
+    hpetInt.mode = PLT_MODE_LEVEL;
+    hpetInt.gsi = line;
+    hpetInt.ipl = PLT_IPL_TIMER;
+    hpetInt.flags = 0;
+    hpetInt.handler = PltHpetDispatch;
+    if (!PltConnectInterrupt (&hpetInt))
     {
         NkLogWarning ("nexke: unable to install HPET interrupt\n");
         return NULL;
     }
-    // Install it
-    PltInstallInterrupt (vector, intObj);
     NkLogDebug ("nexke: using HPET as timer, precision %ldns\n", pltHpetTimer.precision);
     return &pltHpetTimer;
 }

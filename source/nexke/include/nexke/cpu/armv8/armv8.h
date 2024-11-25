@@ -41,8 +41,6 @@ typedef struct _nkarchccb
     uint64_t features;    // CPU feature flags
     bool intHold;         // Interrupt hold state
     bool intReq;          // Interrupt enable request
-    bool spuriousInt;     // If a spurious interrupt is pending GIC
-    uint32_t savedIar;    // Saved IAR value from GIC
     int asidBits;         // Number of ASID bits
     int paBits;           // Physical address bits
     int vaBits;           // Virtual address bits supported
@@ -176,7 +174,7 @@ typedef struct _cputhread
 
 typedef struct _cpuint
 {
-    uint64_t tpidr, spsr, elr, handler, spEl0;
+    uint64_t iar, tpidr, spsr, elr, handler, spEl0;
     uint64_t x30, x29, x28, x27, x26, x25, x24;
     uint64_t x23, x22, x21, x20, x19, x18, x17, x16;
     uint64_t x15, x14, x13, x12, x11, x10, x9, x8;

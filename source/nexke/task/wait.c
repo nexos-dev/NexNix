@@ -73,12 +73,10 @@ errno_t TskWaitQueueFlags (TskWaitQueue_t* queue, int flags, ktime_t timeout)
     {
         // Wait failed, cleanup
         NkListRemove (&queue->waiters, &waitObj->link);
-        NkSpinUnlock (&waitObj->lock);
         // Timeout occured, return error
         err = ETIMEDOUT;
         goto cleanup;
     }
-    NkSpinUnlock (&waitObj->lock);    // Unlock wait object (as WaitOnObj locked it)
     // Check if we were awoken as the result of closure
     if (queue->done)
     {

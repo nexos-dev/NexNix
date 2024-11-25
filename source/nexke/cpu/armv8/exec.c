@@ -75,7 +75,7 @@ int CpuGetIntNum (CpuIntContext_t* ctx)
     }
     else if (CPU_IS_IRQ (ctx->handler))
     {
-        code = intCtrl->getVector (CpuGetCcb());
+        code = intCtrl->getVector (CpuGetCcb(), ctx);
     }
     else
         assert (0);
@@ -161,7 +161,8 @@ void CpuRegisterExecs()
             PltInstallExec (i, CpuDataAbort);
         else if (i == CPU_EC_IA_LOW_EL || i == CPU_EC_IA_CUR_EL)
             PltInstallExec (i, CpuInsnAbort);
-        PltInstallExec (i, NULL);
+        else
+            PltInstallExec (i, NULL);
     }
     intCtrl = PltGetPlatform()->intCtrl;
 }

@@ -89,6 +89,8 @@ CpuVector\i:
     mrs x0, SPSR_EL1
     mrs x1, TPIDR_EL0
     stp x1, x0, [sp, #-16]!
+    mov x0, 0
+    str x0, [sp, #-8]!
     // Call PltTrapDispatch
     mov x0, sp
     bl PltTrapDispatch

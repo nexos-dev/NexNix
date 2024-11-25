@@ -180,6 +180,9 @@ NkTimeEvent_t* NkTimeNewEvent();
 // Frees a timer event
 void NkTimeFreeEvent (NkTimeEvent_t* event);
 
+// Handles time events
+void NkTimeHandler();
+
 // Resource interface
 
 // Hash table of chunks size

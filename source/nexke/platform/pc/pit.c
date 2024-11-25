@@ -56,12 +56,7 @@ typedef struct _pitpvt
 } pltPitPrivate_t;
 
 static pltPitPrivate_t pitPvt = {0};
-
-// Sets callback of timer
-static void PltPitSetCallback (void (*cb)())
-{
-    pitTimer.callback = cb;
-}
+static NkHwInterrupt_t pitInt = {0};
 
 // Arms timer to delta
 static void PltPitArmTimer (ktime_t delta)
@@ -114,8 +109,7 @@ static bool PltPitDispatch (NkInterrupt_t* intObj, CpuIntContext_t* ctx)
     {
         // Call the callback. In periodic mode software must check for deadlines on every tick
         // In one shot this will drain the current deadline
-        if (pitTimer.callback)
-            pitTimer.callback();
+        NkTimeHandler();
     }
     return true;
 }
@@ -136,8 +130,6 @@ static void PltPitPoll (ktime_t time)
 
 PltHwTimer_t pitTimer = {.type = PLT_TIMER_PIT,
                          .armTimer = PltPitArmTimer,
-                         .setCallback = PltPitSetCallback,
-                         .callback = NULL,
                          .precision = 0,
                          .maxInterval = 0,
                          .private = (uintptr_t) &pitPvt};
@@ -152,17 +144,13 @@ PltHwClock_t pitClock = {.type = PLT_CLOCK_PIT,
 static void PltPitInstallInt()
 {
     // Prepare interrupt
-    NkHwInterrupt_t* pitInt = PltAllocHwInterrupt();
-    pitInt->gsi = PltGetGsi (PLT_BUS_ISA, PLT_PIC_IRQ_PIT);
-    pitInt->mode = PLT_MODE_EDGE;
-    pitInt->ipl = PLT_IPL_TIMER;
-    pitInt->flags = 0;
-    pitInt->handler = PltPitDispatch;
-    int vector = PltConnectInterrupt (pitInt);
-    if (vector == -1)
+    pitInt.gsi = PltGetGsi (PLT_BUS_ISA, PLT_PIC_IRQ_PIT);
+    pitInt.mode = PLT_MODE_EDGE;
+    pitInt.ipl = PLT_IPL_TIMER;
+    pitInt.flags = 0;
+    pitInt.handler = PltPitDispatch;
+    if (!PltConnectInterrupt (&pitInt))
         NkPanic ("nexke: unable to install PIT interrupt");
-    // Install interrupt
-    PltInstallInterrupt (vector, pitInt);
 }
 
 // Initializes PIT clock

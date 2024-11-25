@@ -32,6 +32,8 @@ static AcpiFadt_t* fadt = NULL;
 // PM timer stuff
 extern PltHwClock_t acpiPmClock;
 
+static NkHwInterrupt_t sciInt = {0};
+
 // MMIO base if using MMIO
 static uint32_t* acpiPmBase = NULL;
 
@@ -788,15 +790,14 @@ void PltAcpiPcEnable()
         // Install SCI handler
         if (fadt->sciInt)
         {
-            NkHwInterrupt_t* sciInt = PltAllocHwInterrupt();
-            sciInt->gsi = PltGetGsi (PLT_BUS_ISA, fadt->sciInt);
-            sciInt->mode = PLT_MODE_LEVEL;
-            sciInt->flags = PLT_HWINT_ACTIVE_LOW;
-            sciInt->handler = PltAcpiSciHandler;
-            int vector = PltConnectInterrupt (sciInt);
-            if (vector == -1)
+            PltInitInterrupt (&sciInt,
+                              PltAcpiSciHandler,
+                              PltGetGsi (PLT_BUS_ISA, fadt->sciInt),
+                              PLT_IPL_TIMER,
+                              PLT_MODE_LEVEL,
+                              PLT_HWINT_ACTIVE_LOW);
+            if (!PltConnectInterrupt (&sciInt))
                 NkPanic ("nexke: unable to install SCI");
-            PltInstallInterrupt (vector, sciInt);
         }
     }
 }

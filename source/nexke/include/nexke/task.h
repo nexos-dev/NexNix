@@ -39,7 +39,6 @@ typedef struct _waitobj
     ktime_t timeout;       // Timeout of this object
     void* obj;             // Pointer to object being waited on
     int result;            // Result of wait
-    spinlock_t lock;
     NkLink_t ownerLink;    // Link on list of owned wait objects
 } TskWaitObj_t;
 
@@ -96,18 +95,28 @@ typedef struct _thread
     NkTimeEvent_t* timeout;       // Wait queue timeout
 } NkThread_t;
 
+#define TskLockThread(thread)   NkSpinLock (&(thread)->lock)
+#define TskUnlockThread(thread) NkSpinUnlock (&(thread)->lock)
+
+#define TskLockRq(ccb)   NkSpinLock (&(ccb)->rqLock)
+#define TskUnlockRq(ccb) NkSpinUnlock (&(ccb)->rqLock)
+
 // Thread flags
 #define TSK_THREAD_IDLE (1 << 0)
 
 // Helpers for wait assertion
-#define TSK_SET_THREAD_ASSERT(thread, val) \
-    (__atomic_store_n (&(thread)->waitAsserted, (val), __ATOMIC_RELEASE))
-#define TSK_CHECK_THREAD_ASSERT(thread)                                    \
-    int __val = 0;                                                         \
-    do                                                                     \
-    {                                                                      \
-        __atomic_load (&(thread)->waitAsserted, &__val, __ATOMIC_ACQUIRE); \
-    } while (__val);
+static FORCEINLINE void TskThreadSetAssert (NkThread_t* thread, int val)
+{
+    __atomic_store_n (&(thread)->waitAsserted, (val), __ATOMIC_RELEASE);
+}
+static FORCEINLINE void TskThreadCheckAssert (NkThread_t* thread)
+{
+    int val = 0;
+    do
+    {
+        __atomic_load (&(thread)->waitAsserted, &val, __ATOMIC_ACQUIRE);
+    } while (val);
+}
 
 // Thread states
 #define TSK_THREAD_READY       0
@@ -170,12 +179,12 @@ void TskWakeObj (TskWaitObj_t* obj);
 void TskEnablePreemptUnsafe();
 
 // Disables preemption
-static inline void TskDisablePreempt()
+static FORCEINLINE void TskDisablePreempt()
 {
     ++CpuGetCcb()->preemptDisable;
 }
 
-static inline void TskEnablePreempt()
+static FORCEINLINE void TskEnablePreempt()
 {
     NkCcb_t* ccb = CpuGetCcb();
     --ccb->preemptDisable;

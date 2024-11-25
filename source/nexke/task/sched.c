@@ -33,10 +33,8 @@ static PltHwClock_t* clock = NULL;
 
 // NOTE3: the public interfaces all lock the run queue so the caller doesn't have to
 
-// NOTE: most routines that use threads will lock the thread before use. Proper ordering is
-// thread followed by run queue. Note that the scheduling functions (TskSchedule and
-// TskSetCurrentThread) dont bother with locking the threads. This is because they're protected by
-// the run queue lock
+// NOTE: most routines that use threads will lock the thread before use. Ordering is queue followed
+// by thread
 
 // Idle thread routine
 static void TskIdleThread (void*)
@@ -52,8 +50,6 @@ static void TskIdleThread (void*)
 static FORCEINLINE void tskReadyThread (NkCcb_t* ccb, NkThread_t* thread)
 {
     assert (PltGetIpl() == PLT_IPL_HIGH);
-    // Make sure a wait isn't asserted
-    TSK_CHECK_THREAD_ASSERT (thread);
     // Check if we were preempted
     if (thread->preempted)
     {
@@ -76,8 +72,6 @@ static FORCEINLINE void tskReadyThread (NkCcb_t* ccb, NkThread_t* thread)
 // Hook to prepare thread to stop running and let another thread run
 static FORCEINLINE void tskStopThread (NkCcb_t* ccb, NkThread_t* thread)
 {
-    // NOTE: this does not violate ordering because the thread we ar stopping was not on
-    // the run queue so no deadlock can happen
     NkSpinLock (&thread->lock);
     assert (PltGetIpl() == PLT_IPL_HIGH);
     // Update runtime of thread
@@ -90,7 +84,7 @@ static FORCEINLINE void tskStopThread (NkCcb_t* ccb, NkThread_t* thread)
             tskReadyThread (ccb, thread);    // Admit it to run queue
     }
     else if (thread->state == TSK_THREAD_WAITING)
-        TSK_SET_THREAD_ASSERT (thread, 0);
+        TskThreadSetAssert (thread, 0);
     NkSpinUnlock (&thread->lock);
 }
 
@@ -172,9 +166,9 @@ static FORCEINLINE void tskPreempt()
     else
     {
         ccb->preemptReq = false;
-        NkSpinLock (&ccb->rqLock);
+        TskLockRq (ccb);
         tskSchedule (ccb);    // Schedule the next thread
-        NkSpinUnlock (&ccb->rqLock);
+        TskUnlockRq (ccb);
     }
 }
 
@@ -200,45 +194,44 @@ NkThread_t* TskGetCurrentThread()
 void TskSetCurrentThread (NkThread_t* thread)
 {
     NkCcb_t* ccb = CpuGetCcb();
-    NkSpinLock (&ccb->rqLock);
+    TskLockRq (ccb);
     tskSetCurrentThread (ccb, thread);
-    NkSpinUnlock (&ccb->rqLock);
+    TskUnlockRq (ccb);
 }
 
 void TskReadyThread (NkThread_t* thread)
 {
     NkCcb_t* ccb = CpuGetCcb();
     // Lock 'er up
-    NkSpinLock (&thread->lock);
-    NkSpinLock (&ccb->rqLock);
+    TskLockRq (ccb);
+    TskLockThread (thread);
     // Ready this thread
     tskReadyThread (ccb, thread);
     // Unlock it
-    NkSpinUnlock (&ccb->rqLock);
-    NkSpinUnlock (&thread->lock);
+    TskUnlockThread (thread);
+    TskUnlockRq (ccb);
 }
 
 void TskSchedule()
 {
     NkCcb_t* ccb = CpuGetCcb();
-    NkSpinLock (&ccb->rqLock);
+    TskLockRq (ccb);
     tskSchedule (ccb);
-    NkSpinUnlock (&ccb->rqLock);
+    TskUnlockRq (ccb);
 }
 
 // In this module for performance reasons
 void TskWakeObj (TskWaitObj_t* obj)
 {
     NkCcb_t* ccb = CpuGetCcb();
+    NkThread_t* thread = obj->waiter;
     // Lock
-    NkSpinLock (&obj->waiter->lock);
-    NkSpinLock (&ccb->rqLock);
-    tskReadyThread (ccb, obj->waiter);
+    TskLockRq (ccb);
+    TskLockThread (thread);
+    tskReadyThread (ccb, thread);
     // Unlock
-    NkSpinUnlock (&ccb->rqLock);
-    NkSpinUnlock (&obj->waiter->lock);
-    //  Unlock wait object. This is to be called after TskFinishWait
-    NkSpinUnlock (&obj->lock);
+    TskUnlockThread (thread);
+    TskUnlockRq (ccb);
 }
 
 // Time slice handler

@@ -149,6 +149,7 @@ typedef struct _ioapic
     int numRedir;               // Num redirection entry of this APIC
     uint32_t gsiBase;           // GSI base of this APIC
     volatile uint32_t* addr;    // Base address of APIC
+    spinlock_t lock;            // Lock on IO APIC
 } pltIoApic_t;
 
 static pltIoApic_t ioApics[PLT_IOAPIC_MAX + 1] = {0};
@@ -189,6 +190,10 @@ static int finalArm = 0;
 extern PltHwTimer_t pltApicTimer;
 
 extern PltHwIntCtrl_t pltApic;
+
+static NkHwInterrupt_t spuriousInt = {0};
+static NkHwInterrupt_t errorInt = {0};
+static NkHwInterrupt_t timerInt = {0};
 
 // Maps IPL to APIC priority
 static inline uint8_t pltLapicMapIpl (ipl_t ipl)
@@ -295,7 +300,7 @@ static bool pltLapicTimer (NkInterrupt_t* intObj, CpuIntContext_t* context)
     else
     {
         // Call the callback to drain the event queue
-        pltApicTimer.callback();
+        NkTimeHandler();
     }
     return true;
 }
@@ -436,22 +441,24 @@ static bool pltApicMapInterrupt (NkHwInterrupt_t* intObj)
     redir |= vector & 0xFF;
     redir |= (uint64_t) (PltGetPlatform()->bsp->id) << PLT_IOAPIC_DEST_SHIFT;
     // Now write it out
+    NkSpinLock (&apic->lock);
     pltIoApicWriteRedir (apic, intObj->gsi - apic->gsiBase, redir);
+    NkSpinUnlock (&apic->lock);
     return true;
 }
 
 // Interface functions
-static bool PltApicBeginInterrupt (NkCcb_t* ccb, int vector)
+static bool PltApicBeginInterrupt (NkCcb_t* ccb, CpuIntContext_t* ctx)
 {
     return true;
 }
 
-static int PltApicGetVector (NkCcb_t* ccb)
+static int PltApicGetVector (NkCcb_t* ccb, CpuIntContext_t* ctx)
 {
     return -1;
 }
 
-static void PltApicEndInterrupt (NkCcb_t* ccb, int vector)
+static void PltApicEndInterrupt (NkCcb_t* ccb, CpuIntContext_t* ctx)
 {
     pltLapicWrite (PLT_LAPIC_EOI, 0);    // Send EOI
 }
@@ -461,7 +468,9 @@ static void PltApicDisableInterrupt (NkCcb_t* ccb, NkHwInterrupt_t* intObj)
     pltIoApic_t* apic = pltApicGetIoApic (intObj->gsi);
     assert (apic);
     uint32_t line = intObj->gsi - apic->gsiBase;
+    NkSpinLock (&apic->lock);
     pltIoApicWriteRedir (apic, line, pltIoApicReadRedir (apic, line) | PLT_IOAPIC_MASK);
+    NkSpinUnlock (&apic->lock);
 }
 
 static void PltApicEnableInterrupt (NkCcb_t* ccb, NkHwInterrupt_t* intObj)
@@ -469,7 +478,9 @@ static void PltApicEnableInterrupt (NkCcb_t* ccb, NkHwInterrupt_t* intObj)
     pltIoApic_t* apic = pltApicGetIoApic (intObj->gsi);
     assert (apic);
     uint32_t line = intObj->gsi - apic->gsiBase;
+    NkSpinLock (&apic->lock);
     pltIoApicWriteRedir (apic, line, pltIoApicReadRedir (apic, line) & ~(PLT_IOAPIC_MASK));
+    NkSpinUnlock (&apic->lock);
 }
 
 static void PltApicSetIpl (NkCcb_t* ccb, ipl_t ipl)
@@ -487,9 +498,8 @@ static void PltApicSetIpl (NkCcb_t* ccb, ipl_t ipl)
 static int PltApicConnectInterrupt (NkCcb_t* ccb, NkHwInterrupt_t* intObj)
 {
     // Check if this line is in use or not
-    assert (intObj->gsi < pltApic.mapEntries);
+    assert (intObj->gsi < pltApic.numLines);
     PltHwIntChain_t* curChain = &pltApic.lineMap[intObj->gsi];
-    NkSpinLock (&curChain->lock);
     if (NkListFront (&curChain->list))
     {
         NkHwInterrupt_t* chainFront =
@@ -508,24 +518,15 @@ static int PltApicConnectInterrupt (NkCcb_t* ccb, NkHwInterrupt_t* intObj)
         {
             // Remap if we can
             if (curChain->noRemap)
-            {
-                NkSpinUnlock (&curChain->lock);
                 return -1;    // Can't do it
-            }
             // Map the interrupt object first
             if (!pltApicMapInterrupt (intObj))
-            {
-                NkSpinUnlock (&curChain->lock);
                 return -1;    // Can't do it
-            }
             // Remap everything to the vector we specified
             NkInterrupt_t* obj = PltGetInterrupt (chainFront->vector);
             assert (obj);
             if (!PltRemapInterrupt (obj, intObj->vector, intObj->ipl))
-            {
-                NkSpinUnlock (&curChain->lock);
                 return -1;    // Can't do it
-            }
         }
         else
         {
@@ -537,15 +538,11 @@ static int PltApicConnectInterrupt (NkCcb_t* ccb, NkHwInterrupt_t* intObj)
     else
     {
         if (!pltApicMapInterrupt (intObj))
-        {
-            NkSpinUnlock (&curChain->lock);
             return -1;
-        }
     }
     // Set remappable flag
     if (intObj->flags & PLT_HWINT_FORCE_IPL)
         curChain->noRemap = true;
-    NkSpinUnlock (&curChain->lock);
     return intObj->vector;
 }
 
@@ -564,7 +561,9 @@ static void PltApicDisconnectInterrupt (NkCcb_t* ccb, NkHwInterrupt_t* intObj)
         pltIoApic_t* apic = pltApicGetIoApic (intObj->gsi);
         assert (apic);
         // Disconnect it
+        NkSpinLock (&apic->lock);
         pltIoApicWriteRedir (apic, intObj->gsi - apic->gsiBase, PLT_IOAPIC_MASK);
+        NkSpinUnlock (&apic->lock);
     }
 }
 
@@ -592,11 +591,6 @@ PltHwIntCtrl_t pltApic = {.type = PLT_HWINT_APIC,
                           .endInterrupt = PltApicEndInterrupt,
                           .setIpl = PltApicSetIpl,
                           .getVector = PltApicGetVector};
-
-static void pltApicSetCallback (void (*cb)())
-{
-    pltApicTimer.callback = cb;
-}
 
 static void pltApicArmTimer (ktime_t delta)
 {
@@ -676,21 +670,11 @@ static bool pltLapicInit()
     }
     assert (PltGetPlatform()->bsp);
     // Install spurious and error interrupts
-    NkHwInterrupt_t* hwInt = PltAllocHwInterrupt();
-    hwInt->flags = PLT_HWINT_INTERNAL;
-    hwInt->gsi = PLT_GSI_INTERNAL;
-    hwInt->ipl = PLT_IPL_HIGH;
-    hwInt->vector = PLT_APIC_SPURIOUS;
-    hwInt->handler = pltLapicSpurious;
-    PltInstallInterrupt (hwInt->vector, hwInt);
+    PltInitInternalInt (&spuriousInt, pltLapicSpurious, PLT_APIC_SPURIOUS, PLT_IPL_HIGH, 0, 0);
+    PltConnectInterrupt (&spuriousInt);
     // Error interrupt
-    hwInt = PltAllocHwInterrupt();
-    hwInt->gsi = PLT_GSI_INTERNAL;
-    hwInt->ipl = PLT_IPL_HIGH;
-    hwInt->flags = PLT_HWINT_INTERNAL;
-    hwInt->vector = PLT_APIC_ERROR;
-    hwInt->handler = pltLapicError;
-    PltInstallInterrupt (hwInt->vector, hwInt);
+    PltInitInternalInt (&errorInt, pltLapicError, PLT_APIC_ERROR, PLT_IPL_HIGH, 0, 0);
+    PltConnectInterrupt (&errorInt);
     return true;
 }
 
@@ -739,15 +723,13 @@ PltHwIntCtrl_t* PltApicInit()
     size_t mapSz = sizeof (PltHwIntChain_t) * numLines;
     // NOTE: we would ideally malloc here, but for now, malloc sizes are limited
     pltApic.lineMap = (PltHwIntChain_t*) MmAllocKvRegion (2, MM_KV_NO_DEMAND);
-    pltApic.mapEntries = numLines;
+    pltApic.numLines = numLines;
     assert (pltApic.lineMap);
     memset (pltApic.lineMap, 0, mapSz);
     return &pltApic;
 }
 
-PltHwTimer_t pltApicTimer = {.type = PLT_TIMER_APIC,
-                             .setCallback = pltApicSetCallback,
-                             .armTimer = pltApicArmTimer};
+PltHwTimer_t pltApicTimer = {.type = PLT_TIMER_APIC, .armTimer = pltApicArmTimer};
 
 PltHwTimer_t* PltApicInitTimer()
 {
@@ -770,13 +752,8 @@ PltHwTimer_t* PltApicInitTimer()
     pltApicTimer.maxInterval = UINT32_MAX * pltApicTimer.precision;
     isApicTimer = true;
     // Setup the interrupt
-    NkHwInterrupt_t* hwInt = PltAllocHwInterrupt();
-    hwInt->ipl = PLT_IPL_TIMER;
-    hwInt->flags = PLT_HWINT_INTERNAL;
-    hwInt->vector = PLT_APIC_TIMER;
-    hwInt->gsi = PLT_GSI_INTERNAL;
-    hwInt->handler = pltLapicTimer;
-    PltInstallInterrupt (hwInt->vector, hwInt);
+    PltInitInternalInt (&timerInt, pltLapicTimer, PLT_APIC_TIMER, PLT_IPL_TIMER, 0, 0);
+    PltConnectInterrupt (&timerInt);
     // Unmask the interrupt
     pltLapicWrite (PLT_LVT_TIMER, pltLapicRead (PLT_LVT_TIMER) & ~(PLT_APIC_MASKED));
     NkLogDebug ("nexke: using APIC as timer, precision %uns\n", pltApicTimer.precision);

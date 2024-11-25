@@ -84,8 +84,9 @@ static inline uint16_t PltPicGetIsr()
 }
 
 // Begins processing an interrupt
-static bool PltPicBeginInterrupt (NkCcb_t* ccb, int vector)
+static bool PltPicBeginInterrupt (NkCcb_t* ccb, CpuIntContext_t* ctx)
 {
+    int vector = CPU_CTX_INTNUM (ctx);
     if (vector == CPU_BASE_HWINT + 7)
     {
         if (!PltPicGetIsr() & (1 << 7))
@@ -108,8 +109,9 @@ static bool PltPicBeginInterrupt (NkCcb_t* ccb, int vector)
 }
 
 // Ends processing of an interrupt
-static void PltPicEndInterrupt (NkCcb_t* ccb, int vector)
+static void PltPicEndInterrupt (NkCcb_t* ccb, CpuIntContext_t* ctx)
 {
+    int vector = CPU_CTX_INTNUM (ctx);
     // Send EOI to PIC
     if ((vector - CPU_BASE_HWINT) >= 8)
         CpuOutb (PLT_PIC_SLAVE_CMD, PLT_PIC_EOI);
@@ -249,7 +251,7 @@ PltHwIntCtrl_t* PltPicInit()
     // Set up line map
     size_t mapSz = sizeof (PltHwIntChain_t) * 16;
     plt8259A.lineMap = (PltHwIntChain_t*) kmalloc (mapSz);
-    plt8259A.mapEntries = 16;
+    plt8259A.numLines = 16;
     assert (plt8259A.lineMap);
     memset (plt8259A.lineMap, 0, mapSz);
     return &plt8259A;

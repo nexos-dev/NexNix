@@ -60,18 +60,23 @@ typedef struct _mmspace
     MmPtCacheEnt_t* ptListsEnd[MM_PTAB_MAX_LEVEL + 1];    // List tails for each levels
     bool tlbUpdatePending;                                // Is a TLB update pending?
                               // Used to lazily update the TLB on CPUs where that is slow
-    int freeCount;        // Free number of cache entries
-    NkList_t pageList;    // Page table pages
-    int refCount;         // Number of references to this address space
-    spinlock_t lock;      // Lock on address space
-                          // Should be more granular but whatever
+    int freeCount;             // Free number of cache entries
+    NkList_t pageList;         // Page table pages
+    int refCount;              // Number of references to this address space
+    spinlock_t lock;           // Lock on address space
+                               // Should be more granular but whatever
+    spinlock_t ptCacheLock;    // Lock on PT cache
 #ifdef NEXNIX_ARCH_I386
     int keVersion;    // Kernel page table version
 #endif
 } MmMulSpace_t;
 
-#define MM_MUL_LOCK(space)   (NkSpinLock (&space->mulSpace.lock))
-#define MM_MUL_UNLOCK(space) (NkSpinUnlock (&space->mulSpace.lock))
+#define MM_MUL_LOCK(space)                                   \
+    NkSpinLock (&MmGetCurrentSpace()->mulSpace.ptCacheLock); \
+    NkSpinLock (&space->mulSpace.lock)
+#define MM_MUL_UNLOCK(space)              \
+    NkSpinUnlock (&space->mulSpace.lock); \
+    NkSpinUnlock (&MmGetCurrentSpace()->mulSpace.ptCacheLock);
 
 // Initializes page table manager
 void MmPtabInit (int numLevels);

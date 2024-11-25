@@ -130,18 +130,28 @@ void MmMulInit()
 // Allocates page table into ent
 paddr_t MmMulAllocTable (MmSpace_t* space, uintptr_t addr, pte_t* stBase, pte_t* ent)
 {
+    // Unlock address space quickly
+    MM_MUL_UNLOCK (space);
     // Allocate the table
     MmPage_t* pg = MmAllocFixedPage();
     MmFixPage (pg);
     paddr_t tab = pg->pfn * NEXKE_CPU_PAGESZ;
     // Zero it
     MmMulZeroPage (pg);
-    // Add to page list
-    NkListAddFront (&space->mulSpace.pageList, &pg->link);
-    // Set PTE
-    pte_t flags = PF_V | PF_TAB;
-    // Map it
-    *ent = tab | flags;
+    // Re-lock
+    MM_MUL_LOCK (space);
+    // Make sure a table wasn't already map while we were unlock
+    if (*ent)
+        tab = *ent & PT_FRAME;
+    else
+    {
+        // Add to page list
+        NkListAddFront (&space->mulSpace.pageList, &pg->link);
+        // Set PTE
+        pte_t flags = PF_V | PF_TAB;
+        // Map it
+        *ent = tab | flags;
+    }
     return tab;
 }
 

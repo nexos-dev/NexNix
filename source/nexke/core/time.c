@@ -322,6 +322,5 @@ void NkInitTime()
     platform = PltGetPlatform();
     NkListInit (&CpuGetCcb()->timeEvents);    // Initialize list
     nkEventCache = MmCacheCreate (sizeof (NkTimeEvent_t), "NkTimeEvent_t", 0, 0);
-    // Set callback
-    platform->timer->setCallback (NkTimeHandler);
+    int v = platform->timer->type;
 }

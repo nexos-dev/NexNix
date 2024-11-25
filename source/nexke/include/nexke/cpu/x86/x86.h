@@ -18,6 +18,7 @@
 #ifndef _X86_H
 #define _X86_H
 
+#include <nexke/types.h>
 #include <stdbool.h>
 #include <stdint.h>
 
@@ -256,7 +257,7 @@ extern bool ccbInit;
 NkCcb_t* CpuRealCcb();
 
 // Gets the current CCB
-static inline NkCcb_t* CpuGetCcb()
+static FORCEINLINE NkCcb_t* CpuGetCcb()
 {
     if (ccbInit)
     {

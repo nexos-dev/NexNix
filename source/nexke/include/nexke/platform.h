@@ -55,22 +55,21 @@ NkConsole_t* PltGetSecondaryCons();
 #define PLT_IPL_NUM_PRIO 32
 
 // Function pointer types for below
-typedef bool (*PltHwBeginInterrupt) (NkCcb_t*, int vector);
-typedef void (*PltHwEndInterrupt) (NkCcb_t*, int vector);
+typedef bool (*PltHwBeginInterrupt) (NkCcb_t*, CpuIntContext_t*);
+typedef void (*PltHwEndInterrupt) (NkCcb_t*, CpuIntContext_t*);
 typedef void (*PltHwDisableInterrupt) (NkCcb_t*, NkHwInterrupt_t*);
 typedef void (*PltHwEnableInterrupt) (NkCcb_t*, NkHwInterrupt_t*);
 typedef void (*PltHwSetIpl) (NkCcb_t*, ipl_t);
 typedef int (*PltHwConnectInterrupt) (NkCcb_t*, NkHwInterrupt_t*);
 typedef void (*PltHwDisconnectInterrupt) (NkCcb_t*, NkHwInterrupt_t*);
-typedef int (*PltHwGetVector) (NkCcb_t*);
+typedef int (*PltHwGetVector) (NkCcb_t*, CpuIntContext_t*);
 
 // Interupt chain structure
 typedef struct _intchain
 {
     NkList_t list;
     size_t chainLen;
-    size_t maskCount;    // Number of masked interrupts in chain
-    bool noRemap;        // If the chain is remappable
+    bool noRemap;    // If the chain is remappable
     spinlock_t lock;
 } PltHwIntChain_t;
 
@@ -79,7 +78,7 @@ typedef struct _hwintctrl
 {
     int type;
     PltHwIntChain_t* lineMap;    // Map of all interrupt lines
-    size_t mapEntries;           // Number of map entries
+    size_t numLines;             // Number of map entries
     PltHwBeginInterrupt beginInterrupt;
     PltHwEndInterrupt endInterrupt;
     PltHwDisableInterrupt disableInterrupt;
@@ -121,7 +120,6 @@ typedef struct _hwint
 #define PLT_HWINT_NON_CHAINABLE (1 << 3)
 #define PLT_HWINT_CHAINED       (1 << 4)
 #define PLT_HWINT_FORCE_IPL     (1 << 5)
-#define PLT_HWINT_MASKED        (1 << 6)
 
 #define PLT_GSI_INTERNAL 0xFFFFFFFF
 
@@ -167,14 +165,27 @@ NkInterrupt_t* PltInstallExec (int vector, PltIntHandler hndlr);
 // Installs a service handler
 NkInterrupt_t* PltInstallSvc (int vector, PltIntHandler hndlr);
 
-// Installs a hardware interrupt
-NkInterrupt_t* PltInstallInterrupt (int vector, NkHwInterrupt_t* intObj);
-
 // Uninstalls an interrupt handler
 void PltUninstallInterrupt (NkInterrupt_t* intObj);
 
+// Initializes a hardware interrupt
+void PltInitInterrupt (NkHwInterrupt_t* hwInt,
+                       PltIntHandler handler,
+                       uint32_t gsi,
+                       ipl_t ipl,
+                       int mode,
+                       int flags);
+
+// Initializes a  internal interrupt
+void PltInitInternalInt (NkHwInterrupt_t* hwInt,
+                         PltIntHandler handler,
+                         int vector,
+                         ipl_t ipl,
+                         int mode,
+                         int flags);
+
 // Connects an interrupt to hardware controller. Returns a vector to install it to
-int PltConnectInterrupt (NkHwInterrupt_t* hwInt);
+NkInterrupt_t* PltConnectInterrupt (NkHwInterrupt_t* hwInt);
 
 // Disconnects interrupt from hardware controller
 void PltDisconnectInterrupt (NkHwInterrupt_t* hwInt);
@@ -235,11 +246,9 @@ typedef struct _hwtimer
     int precision;          // Precision of timer in nanoseconds
     ktime_t maxInterval;    // Max interval we can be armed for
     // Private data
-    void (*callback)();    // Interrupt callback
     uintptr_t private;
     // Function interface
     PltHwArmTimer armTimer;
-    PltHwSetTimerCallback setCallback;
 } PltHwTimer_t;
 
 #define PLT_TIMER_PIT  1

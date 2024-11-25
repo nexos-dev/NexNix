@@ -22,6 +22,7 @@
 
 // System thread table
 static NkThread_t* nkThreadTable[NEXKE_MAX_THREAD] = {0};
+static spinlock_t nkThreadsLock = 0;
 
 // Thread caching/resource info
 static SlabCache_t* nkThreadCache = NULL;
@@ -38,9 +39,10 @@ static void TskThreadEntry()
     // Get the thread structure
     NkThread_t* thread = CpuGetCcb()->curThread;
     // Unlock ready queue, as we start with it locked
-    if (CpuGetCcb()->preemptDisable)
-        NkSpinUnlock (&CpuGetCcb()->rqLock);
-    // Make IPL is at low level
+    NkCcb_t* ccb = CpuGetCcb();
+    if (ccb->preemptDisable)
+        TskUnlockRq (ccb);
+    // Make sure IPL is at low level
     PltLowerIpl (PLT_IPL_LOW);
     // Executte entry
     thread->entry (thread->arg);
@@ -99,7 +101,9 @@ NkThread_t* TskCreateThread (NkThreadEntry entry, void* arg, const char* name, i
         return NULL;
     }
     // Add to table
+    NkSpinLock (&nkThreadsLock);
     nkThreadTable[tid] = thread;
+    NkSpinUnlock (&nkThreadsLock);
     return thread;
 }
 
@@ -109,7 +113,7 @@ void TskTerminateSelf (int code)
     // Lock the scheduler
     ipl_t ipl = PltRaiseIpl (PLT_IPL_HIGH);
     NkThread_t* thread = TskGetCurrentThread();
-    NkSpinLock (&thread->lock);
+    TskLockThread (thread);
     assert (thread->state == TSK_THREAD_RUNNING);
     // Set our state and exit code
     thread->state = TSK_THREAD_TERMINATING;
@@ -139,7 +143,7 @@ void TskTerminateSelf (int code)
         NkWorkQueueSubmit (nkTerminator, (void*) thread);
     else
         --thread->refCount;
-    NkSpinUnlock (&thread->lock);
+    TskUnlockThread (thread);
     // Now schedule another thread
     TskSchedule();
     // UNREACHABLE
@@ -152,7 +156,11 @@ void TskDestroyThread (NkThread_t* thread)
     NkSpinLock (&thread->lock);
     if (--thread->refCount == 0)
     {
+        // Remove from table
+        NkSpinLock (&nkThreadsLock);
         nkThreadTable[thread->tid] = NULL;
+        NkSpinUnlock (&nkThreadsLock);
+        // Destroy all components of thread
         NkTimeFreeEvent (thread->timeout);
         CpuDestroyContext (thread->context);
         NkFreeResource (nkThreadRes, thread->tid);
@@ -173,10 +181,9 @@ TskWaitObj_t* TskAssertWait (ktime_t timeout, void* obj, int type)
     // Ensure we aren't already waiting on something else
     assert (thread->state != TSK_THREAD_WAITING && !thread->waitAsserted);
     thread->state = TSK_THREAD_WAITING;    // Assert the wait
-    TSK_SET_THREAD_ASSERT (thread, 1);
+    TskThreadSetAssert (thread, 1);
     // Prepare the wait object
     TskWaitObj_t* waitObj = &thread->wait;
-    NkSpinLock (&waitObj->lock);
     NkListInitLink (&waitObj->link);
     NkListInitLink (&waitObj->link);
     waitObj->obj = obj;
@@ -191,7 +198,6 @@ TskWaitObj_t* TskAssertWait (ktime_t timeout, void* obj, int type)
         NkTimeSetWakeEvent (thread->timeout, waitObj);
         NkTimeRegEvent (thread->timeout, timeout, 0);
     }
-    NkSpinUnlock (&waitObj->lock);
     return waitObj;
 }
 
@@ -201,7 +207,6 @@ bool TskWaitOnObj (TskWaitObj_t* waitObj, int flags)
 {
     // Wait
     TskSchedule();
-    NkSpinLock (&waitObj->lock);
     if (waitObj->result != TSK_WAITOBJ_SUCCESS)
         return false;
     if (flags & TSK_WAITOBJ_OWN)
@@ -220,14 +225,11 @@ bool TskWaitOnObj (TskWaitObj_t* waitObj, int flags)
 // If wakeup already occured, returns false
 bool TskClearWait (TskWaitObj_t* waitObj, int result)
 {
-    // Lock the wait object
-    NkSpinLock (&waitObj->lock);
+    // Make sure a wait isn't asserted
+    TskThreadCheckAssert (waitObj->waiter);
     // Check status of wait
     if (waitObj->result != TSK_WAITOBJ_IN_PROG)
-    {
-        NkSpinUnlock (&waitObj->lock);
         return false;    // Objects already awoken
-    }
     // De-register any pending time events
     if (result != TSK_WAITOBJ_TIMEOUT && waitObj->timeout)
         NkTimeDeRegEvent (waitObj->waiter->timeout);

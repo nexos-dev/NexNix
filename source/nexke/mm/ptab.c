@@ -104,7 +104,8 @@ MmPtCacheEnt_t* MmPtabIterate (MmPtIter_t* iter)
         // Set current PTE in table
         table->curPte = MUL_IDX_LEVEL (addr, i - 1);
         // Check if it needs to be cached
-        // This is true if we dont have a pre-existing cache entry or the current PTE goes to zero
+        // This is true if we dont have a pre-existing cache entry or the current PTE goes to
+        // zero
         if (!table->cacheEnt || table->curPte == 0)
         {
             // Return existing cache entry
@@ -141,15 +142,18 @@ void MmPtabEndIterate (MmPtIter_t* iter)
 }
 
 // Zeroes a page with the MUL
-// This function is the same across MULs so it is implemented in the architecture independent module
+// This function is the same across MULs so it is implemented in the architecture independent
+// module
 void MmMulZeroPage (MmPage_t* page)
 {
+    NkSpinLock (&MmGetCurrentSpace()->mulSpace.ptCacheLock);
     // Get physical address
     paddr_t addr = page->pfn * NEXKE_CPU_PAGESZ;
     MmPtCacheEnt_t* cacheEnt = MmPtabGetCache (addr, MM_PTAB_UNCACHED);
     memset ((void*) cacheEnt->addr, 0, NEXKE_CPU_PAGESZ);
     // Free the cache entry
     MmPtabFreeToCache (cacheEnt);
+    NkSpinUnlock (&MmGetCurrentSpace()->mulSpace.ptCacheLock);
 }
 
 // Initializes PT cache in specified space
@@ -316,8 +320,8 @@ void MmPtabReturnCache (MmPtCacheEnt_t* cacheEnt)
     if (mulSpace->freeCount < MM_PTAB_MINFREE)
     {
         // Go through every list and find entries to free
-        // We go from the tail of each list as older entries are less likely to be used according to
-        // the principle of LRU
+        // We go from the tail of each list as older entries are less likely to be used
+        // according to the principle of LRU
         bool done = false;
         for (int i = 0; i <= mmNumLevels; ++i)
         {

@@ -94,12 +94,11 @@ extern PltHwIntCtrl_t gicIntCtrl;
 
 typedef struct _pltgic
 {
-    void* giccBase;              // Base address of GICC
-    int numGiccs;                // Number of GICCs
-    void* gicdBase;              // Base of GICD
-    int numLines;                // Number of GICD lines
-    int basePrio;                // The highest priority we will use
-    PltHwIntChain_t* lineMap;    // Map of all lines
+    void* giccBase;         // Base address of GICC
+    int numGiccs;           // Number of GICCs
+    void* gicdBase;         // Base of GICD
+    int basePrio;           // The highest priority we will use
+    spinlock_t gicdLock;    // Lock on GICD registers
     // uint8_t maskMap[8];          // Map of CPU number to CPU mask
 } pltGic_t;
 
@@ -151,42 +150,47 @@ static inline void pltGicdWriteReg8 (uint16_t reg, uint32_t val)
 static inline void pltGicdSetupInterrupt (NkHwInterrupt_t* intObj)
 {
     uint32_t gsi = intObj->gsi;
+    NkSpinLock (&gic.gicdLock);
     // Disable it first
     pltGicdWriteReg (PLT_GICD_ICEN_BASE + PLT_GIC_INT_REG (gsi), 1 << PLT_GIC_INT_BIT (gsi));
     // Set target priority
     pltGicdWriteReg8 (PLT_GICD_PRIO_BASE + gsi, gic.basePrio - intObj->ipl);
     // Set target CPU
     pltGicdWriteReg8 (PLT_GICD_ITARGET_BASE + gsi, 1 << PltGetPlatform()->bsp->id);
-    // Create mask
-    int cfgMask = (intObj->mode == PLT_MODE_EDGE) ? PLT_GICD_CFG_EDGE : 0;
-    cfgMask |= (intObj->flags & PLT_HWINT_ACTIVE_LOW) ? 0 : PLT_GICD_CFG_HIGH;
-    cfgMask <<= PLT_GIC_INT_CFG_BIT (gsi);
-    // Read current mask
-    uint32_t icfg = pltGicdReadReg (PLT_GICD_ICFG_BASE + PLT_GIC_INT_CFG (gsi));
-    // Add it in
-    icfg &= ~(cfgMask);
-    icfg |= cfgMask;
-    // Write it
-    pltGicdWriteReg (PLT_GICD_ICFG_BASE + PLT_GIC_INT_CFG (gsi), icfg);
+    // If not a PPI set configuration mask
+    bool isPpi = (intObj->gsi < 32);
+    if (!isPpi)
+    {
+        // Create mask
+        int cfgMask = (intObj->mode == PLT_MODE_EDGE) ? PLT_GICD_CFG_EDGE : 0;
+        cfgMask |= (intObj->flags & PLT_HWINT_ACTIVE_LOW) ? 0 : PLT_GICD_CFG_HIGH;
+        cfgMask <<= PLT_GIC_INT_CFG_BIT (gsi);
+        // Read current mask
+        uint32_t icfg = pltGicdReadReg (PLT_GICD_ICFG_BASE + PLT_GIC_INT_CFG (gsi));
+        // Add it in
+        icfg &= ~(cfgMask);
+        icfg |= cfgMask;
+        // Write it
+        pltGicdWriteReg (PLT_GICD_ICFG_BASE + PLT_GIC_INT_CFG (gsi), icfg);
+    }
     // Enable it again
     pltGicdWriteReg (PLT_GICD_ISEN_BASE + PLT_GIC_INT_REG (gsi), 1 << PLT_GIC_INT_BIT (gsi));
+    NkSpinUnlock (&gic.gicdLock);
 }
 
 // Interface functions
-static bool PltGicBeginInterrupt (NkCcb_t* ccb, int vector)
+static bool PltGicBeginInterrupt (NkCcb_t* ccb, CpuIntContext_t* ctx)
 {
-    if (ccb->archCcb.spuriousInt)
-    {
-        ccb->archCcb.spuriousInt = false;
+    int vector = CPU_CTX_INTNUM (ctx);
+    if (vector == 1023)
         return false;    // Spurious interrupt is pending
-    }
     return true;
 }
 
-static void PltGicEndInterrupt (NkCcb_t* ccb, int vector)
+static void PltGicEndInterrupt (NkCcb_t* ccb, CpuIntContext_t* ctx)
 {
     // Write EOI to EOIR
-    pltGiccWriteReg (PLT_GICC_EOI, ccb->archCcb.savedIar);
+    pltGiccWriteReg (PLT_GICC_EOI, ctx->iar);
 }
 
 static void PltGicDisableInterrupt (NkCcb_t* ccb, NkHwInterrupt_t* intObj)
@@ -194,7 +198,9 @@ static void PltGicDisableInterrupt (NkCcb_t* ccb, NkHwInterrupt_t* intObj)
     // Get line number
     uint32_t gsi = intObj->gsi;
     // Disable it
+    NkSpinLock (&gic.gicdLock);
     pltGicdWriteReg (PLT_GICD_ICEN_BASE + PLT_GIC_INT_REG (gsi), 1 << PLT_GIC_INT_BIT (gsi));
+    NkSpinUnlock (&gic.gicdLock);
 }
 
 static void PltGicEnableInterrupt (NkCcb_t* ccb, NkHwInterrupt_t* intObj)
@@ -202,7 +208,9 @@ static void PltGicEnableInterrupt (NkCcb_t* ccb, NkHwInterrupt_t* intObj)
     // Get line number
     uint32_t gsi = intObj->gsi;
     // Enable it
+    NkSpinLock (&gic.gicdLock);
     pltGicdWriteReg (PLT_GICD_ISEN_BASE + PLT_GIC_INT_REG (gsi), 1 << PLT_GIC_INT_BIT (gsi));
+    NkSpinUnlock (&gic.gicdLock);
 }
 
 static void PltGicSetIpl (NkCcb_t* ccb, ipl_t ipl)
@@ -213,12 +221,18 @@ static void PltGicSetIpl (NkCcb_t* ccb, ipl_t ipl)
 
 static int PltGicConnectInterrupt (NkCcb_t* ccb, NkHwInterrupt_t* intObj)
 {
-    assert (intObj->gsi >= 32);
-    PltHwIntChain_t* chain = &gic.lineMap[intObj->gsi];
+    PltHwIntChain_t* chain = &gicIntCtrl.lineMap[intObj->gsi];
     NkSpinLock (&chain->lock);
+    // Determine if this is a PPI
+    bool isPpi = (intObj->gsi < 32);
     // Check if we neec to chain it
     if (NkListFront (&chain->list))
     {
+        if (!isPpi)
+        {
+            NkSpinUnlock (&chain->lock);
+            return -1;    // We don't allow PPIs to be chained
+        }
         NkHwInterrupt_t* chainFront =
             LINK_CONTAINER (NkListFront (&chain->list), NkHwInterrupt_t, link);
         // Interrupt is in use, make sure this will work
@@ -261,19 +275,26 @@ static int PltGicConnectInterrupt (NkCcb_t* ccb, NkHwInterrupt_t* intObj)
 
 static void PltGicDisconnectInterrupt (NkCcb_t* ccb, NkHwInterrupt_t* intObj)
 {
-    PltHwIntChain_t* chain = &gic.lineMap[intObj->gsi];
+    PltHwIntChain_t* chain = &gicIntCtrl.lineMap[intObj->gsi];
     if (chain->chainLen == 0)
     {
         // Disable it
         uint32_t gsi = intObj->gsi;
+        NkSpinLock (&gic.gicdLock);
         pltGicdWriteReg (PLT_GICD_ICEN_BASE + PLT_GIC_INT_REG (gsi), 1 << PLT_GIC_INT_BIT (gsi));
+        NkSpinUnlock (&gic.gicdLock);
     }
 }
 
-static int PltGicGetVector (NkCcb_t* ccb)
+static int PltGicGetVector (NkCcb_t* ccb, CpuIntContext_t* ctx)
 {
-    // Acknowledge the interrupt
-    uint32_t iar = pltGiccReadReg (PLT_GICC_IAR);
+    // If IAR is saved, used that. Otherwise ack the interrupt too
+    uint32_t iar = ctx->iar;
+    if (!iar)
+    {
+        iar = pltGiccReadReg (PLT_GICC_IAR);
+        ctx->iar = iar;
+    }
     return CPU_BASE_HWINT + (iar & PLT_GICC_INTID_MASK);
 }
 
@@ -303,17 +324,18 @@ static bool pltGicdInit()
                                   1,
                                   MUL_PAGE_DEV | MUL_PAGE_R | MUL_PAGE_RW | MUL_PAGE_KE);
     uint32_t type = pltGicdReadReg (PLT_GICD_TYPE);
-    gic.numLines = type & PLT_GICD_LINES_MASK;
+    gicIntCtrl.numLines = type & PLT_GICD_LINES_MASK;
     // Allocate line map
-    size_t mapSz = (gic.numLines + 32) * sizeof (PltHwIntChain_t);
-    gic.lineMap = (PltHwIntChain_t*) MmAllocKvRegion (CpuPageAlignUp (mapSz) / NEXKE_CPU_PAGESZ,
-                                                      MM_KV_NO_DEMAND);
-    assert (gic.lineMap);
-    memset (gic.lineMap, 0, mapSz);
+    size_t mapSz = (gicIntCtrl.numLines + 32) * sizeof (PltHwIntChain_t);
+    gicIntCtrl.lineMap =
+        (PltHwIntChain_t*) MmAllocKvRegion (CpuPageAlignUp (mapSz) / NEXKE_CPU_PAGESZ,
+                                            MM_KV_NO_DEMAND);
+    assert (gicIntCtrl.lineMap);
+    memset (gicIntCtrl.lineMap, 0, mapSz);
     // Disable it for now
     pltGicdWriteReg (PLT_GICD_CTRL, 0);
     // Disable all interrupts on it
-    for (int i = 0; i < gic.numLines; ++i)
+    for (int i = 0; i < gicIntCtrl.numLines; ++i)
         pltGicdWriteReg (PLT_GICD_ICEN_BASE + PLT_GIC_INT_REG (i), 0xFFFFFFFF);
     // Enable
     pltGicdWriteReg (PLT_GICD_CTRL, PLT_GICD_CTRL_EN);
@@ -381,6 +403,7 @@ static bool pltGiccInit()
 // Initializes GIC driver
 PltHwIntCtrl_t* PltGicInit()
 {
+    NkLogDebug ("nexke: using GIC as interrupt controller\n");
     // Initialize GICDs
     if (!pltGicdInit())
         return NULL;
