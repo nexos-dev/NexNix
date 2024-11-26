@@ -127,7 +127,12 @@ Copyright (C) 2023 - 2024 The Nexware Project\n",
     // Initialize multitasking
     TskInitSys();
     // Create initial thread
-    NkThread_t* initThread = TskCreateThread (NkInitialThread, NULL, "NkInitialThread", 0);
+    NkThread_t* initThread = TskCreateThread (NkInitialThread,
+                                              NULL,
+                                              "NkInitialThread",
+                                              TSK_POLICY_NORMAL,
+                                              TSK_PRIO_HIGH,
+                                              0);
     assert (initThread);
     // Set it as the current thread and then we are done
     TskSetInitialThread (initThread);
@@ -143,7 +148,10 @@ void t1 (void*)
     TskBroadcastWaitQueue (&queue, 0);
     NkLogDebug ("got here\n");
     for (;;)
+    {
+        TskSetThreadPrio (TskGetCurrentThread(), TSK_PRIO_WORKER);
         ;
+    }
 }
 
 // Kernel initial thread
@@ -152,10 +160,13 @@ static void NkInitialThread (void*)
     // Start interrupts now
     CpuUnholdInts();
     TskInitWaitQueue (&queue, TSK_WAITOBJ_QUEUE);
-    NkThread_t* thread = TskCreateThread (t1, NULL, "t1", 0);
+    NkThread_t* thread = TskCreateThread (t1, NULL, "t1", TSK_POLICY_NORMAL, TSK_PRIO_KERNEL, 0);
     TskStartThread (thread);
     TskWaitQueueTimeout (&queue, 50000);
     NkLogDebug ("got here 2\n");
+    TskSleepThread (PLT_NS_IN_SEC * 2);
+    TskSetThreadPrio (thread, TSK_PRIO_HIGH);
+    TskSetThreadPrio (TskGetCurrentThread(), TSK_PRIO_USER);
     for (;;)
         ;
 }

@@ -26,6 +26,7 @@ void TskInitWaitQueue (TskWaitQueue_t* queue, int object)
 {
     memset (queue, 0, sizeof (TskWaitQueue_t));
     queue->queueObject = object;
+    NkListInit (&queue->waiters);
 }
 
 // Asserts that we are going to wait
@@ -126,7 +127,7 @@ static FORCEINLINE void tskWakeQueue (TskWaitQueue_t* queue)
         TskWaitObj_t* waiter = (TskWaitObj_t*) iter;
         // Wake it
         tskWakeThread (queue, waiter);
-        iter = NkListIterate (iter);
+        iter = NkListIterate (&queue->waiters, iter);
     }
 }
 

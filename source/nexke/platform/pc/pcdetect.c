@@ -111,7 +111,7 @@ uint32_t PltGetGsi (int bus, int line)
         // Check if this is it
         if (intSrc->bus == bus && intSrc->line == line)
             return intSrc->gsi;
-        iter = NkListIterate (iter);
+        iter = NkListIterate (&nkPlatform.ints, iter);
     }
     return line;
 }
@@ -127,7 +127,7 @@ PltIntOverride_t* PltGetOverride (uint32_t gsi)
         // Check if this is it
         if (intSrc->gsi == gsi)
             return intSrc;
-        iter = NkListIterate (iter);
+        iter = NkListIterate (&nkPlatform.ints, iter);
     }
     return NULL;
 }

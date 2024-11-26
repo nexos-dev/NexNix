@@ -666,7 +666,7 @@ static bool pltLapicInit()
             PltGetPlatform()->bsp = curCpu;
             break;
         }
-        iter = NkListIterate (iter);
+        iter = NkListIterate (&PltGetPlatform()->cpus, iter);
     }
     assert (PltGetPlatform()->bsp);
     // Install spurious and error interrupts
@@ -694,7 +694,7 @@ PltHwIntCtrl_t* PltApicInit()
         if (cur->type != PLT_INTCTRL_IOAPIC)
         {
             // Skip
-            iter = NkListIterate (iter);
+            iter = NkListIterate (&PltGetPlatform()->intCtrls, iter);
             continue;
         }
         // Get internal structure
@@ -717,7 +717,7 @@ PltHwIntCtrl_t* PltApicInit()
         ioapic->numRedir = numRedir;
         numLines += numRedir;
         ++i;
-        iter = NkListIterate (iter);
+        iter = NkListIterate (&PltGetPlatform()->intCtrls, iter);
     }
     // Set up line map
     size_t mapSz = sizeof (PltHwIntChain_t) * numLines;

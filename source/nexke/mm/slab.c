@@ -104,7 +104,7 @@ static FORCEINLINE SlabBuf_t* slabGetHashedBuf (void* base)
         buf = LINK_CONTAINER (iter, SlabBuf_t, link);
         if (buf->obj == base)
             break;
-        iter = NkListIterate (iter);
+        iter = NkListIterate (&extBufHash[hashIdx], iter);
     }
     NkSpinUnlock (&bufHashLock);
     return NULL;
@@ -226,7 +226,8 @@ static FORCEINLINE void* slabAllocInSlab (SlabCache_t* cache, Slab_t* slab)
 {
     assert (slab->numAvail);
     // Grab first buffer
-    NkLink_t* link = NkListPopFront (&slab->freeList);
+    NkLink_t* link = NkListFront (&slab->freeList);
+    NkListRemove (&slab->freeList, link);
     SlabBuf_t* buf = LINK_CONTAINER (link, SlabBuf_t, link);
     void* obj = buf->obj;
     --slab->numAvail;
@@ -404,21 +405,21 @@ void MmCacheDestroy (SlabCache_t* cache)
     {
         Slab_t* slab = LINK_CONTAINER (iter, Slab_t, link);
         slabFreeSlab (cache, slab);
-        iter = NkListIterate (iter);
+        iter = NkListIterate (&cache->fullSlabs, iter);
     }
     iter = NkListFront (&cache->partialSlabs);
     while (iter)
     {
         Slab_t* slab = LINK_CONTAINER (iter, Slab_t, link);
         slabFreeSlab (cache, slab);
-        iter = NkListIterate (iter);
+        iter = NkListIterate (&cache->partialSlabs, iter);
     }
     iter = NkListFront (&cache->emptySlabs);
     while (iter)
     {
         Slab_t* slab = LINK_CONTAINER (iter, Slab_t, link);
         slabFreeSlab (cache, slab);
-        iter = NkListIterate (iter);
+        iter = NkListIterate (&cache->emptySlabs, iter);
     }
     // Remove from list
     NkListRemove (&cacheList, &cache->link);
@@ -432,12 +433,16 @@ void MmSlabBootstrap()
 {
     // Set globals
     minObjSz = sizeof (SlabBuf_t);
+    NkListInit (&cacheList);
     // Initialize cache of caches
     slabCacheCreate (&caches, sizeof (SlabCache_t), "SlabCache_t", 0, 0);
     // Initialize cache of slabs
     slabCacheCreate (&extSlabCache, sizeof (Slab_t), "Slab_t", 0, 0);
     // Initialize caches of buffers
     slabCacheCreate (&extBufCache, sizeof (SlabBuf_t), "SlabBuf_t", 0, 0);
+    // Initialize external slab hash table
+    for (int i = 0; i < SLAB_EXT_HASH_SZ; ++i)
+        NkListInit (&extBufHash[i]);
 }
 
 // Dumps the state of the slab allocator
@@ -466,6 +471,6 @@ void MmSlabDump()
                     cache->curColor,
                     cache->colorAdj);
         NkSpinUnlock (&cache->lock);
-        cacheIter = NkListIterate (cacheIter);
+        cacheIter = NkListIterate (&cacheList, cacheIter);
     }
 }

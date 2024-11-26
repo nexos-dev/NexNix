@@ -226,10 +226,11 @@ typedef struct _hwclock
     uintptr_t private;
 } PltHwClock_t;
 
-#define PLT_CLOCK_PIT  1
-#define PLT_CLOCK_ACPI 2
-#define PLT_CLOCK_HPET 3
-#define PLT_CLOCK_TSC  4
+#define PLT_CLOCK_PIT     1
+#define PLT_CLOCK_ACPI    2
+#define PLT_CLOCK_HPET    3
+#define PLT_CLOCK_TSC     4
+#define PLT_CLOCK_GENERIC 5
 
 // Initializes clock system
 PltHwClock_t* PltInitClock();
@@ -251,11 +252,12 @@ typedef struct _hwtimer
     PltHwArmTimer armTimer;
 } PltHwTimer_t;
 
-#define PLT_TIMER_PIT  1
-#define PLT_TIMER_SOFT 2
-#define PLT_TIMER_APIC 3
-#define PLT_TIMER_HPET 4
-#define PLT_TIMER_TSC  5
+#define PLT_TIMER_PIT     1
+#define PLT_TIMER_SOFT    2
+#define PLT_TIMER_APIC    3
+#define PLT_TIMER_HPET    4
+#define PLT_TIMER_TSC     5
+#define PLT_TIMER_GENERIC 6
 
 // Initializes system timer
 PltHwTimer_t* PltInitTimer();

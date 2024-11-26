@@ -69,3 +69,14 @@ CpuSwitchContext:
     pop rbx
     pop rbp
     ret         ; Start at RIP of new context
+
+; Performs a resverse bit scan
+; Used for priority checking
+global CpuScanPriority
+CpuScanPriority:
+    bsf rax, rdi
+    jz .prioEmpty
+    ret
+.prioEmpty:
+    mov rax, -1
+    ret

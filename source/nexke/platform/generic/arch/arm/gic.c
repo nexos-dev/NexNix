@@ -388,7 +388,7 @@ static bool pltGiccInit()
             PltGetPlatform()->bsp = curCpu;
             break;
         }
-        iter = NkListIterate (iter);
+        iter = NkListIterate (&PltGetPlatform()->cpus, iter);
     }
     // Get max priority
     pltGicdWriteReg8 (PLT_GICD_PRIO_BASE + 32, 0xFF);

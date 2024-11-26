@@ -23,6 +23,8 @@
 #include <nexke/list.h>
 #include <nexke/types.h>
 
+#define NEXKE_MAX_PRIO 64
+
 // CCB structure (aka CPU control block)
 // This is the core data structure for the CPU, and hence, the kernel
 typedef struct _nkccb
@@ -45,13 +47,18 @@ typedef struct _nkccb
     ktime_t nextDeadline;    // Next armed deadline
     spinlock_t timeLock;     // Time events lock
     // Scheduler info
-    NkList_t readyQueue;       // Scheduler's ready queue
-    spinlock_t rqLock;         // Lock for ready queue
-    NkThread_t* curThread;     // Currently executing thread
-    NkThread_t* idleThread;    // Thread to execute when readyQueue is empty
-    int preemptDisable;        // If preemption is presently allowed
-    bool preemptReq;           // If preemption has been requested
+    NkList_t readyQueues[NEXKE_MAX_PRIO];    // Scheduler's ready queues
+    uint64_t readyMask;                      // Mask of ready priorities
+    spinlock_t rqLock;                       // Lock for ready queues
+    NkThread_t* curThread;                   // Currently executing thread
+    int curPriority;                         // Current priority
+    NkThread_t* idleThread;                  // Thread to execute when readyQueue is empty
+    int preemptDisable;                      // If preemption is presently allowed
+    bool preemptReq;                         // If preemption has been requested
 } NkCcb_t;
+
+// Scans a bit set for highest set bit
+int CpuScanPriority (uint64_t mask);
 
 // Defined CPU architectures
 #define NEXKE_CPU_I386    1

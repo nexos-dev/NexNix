@@ -83,6 +83,7 @@ void NkLogMessage (const char* fmt, int level, va_list ap)
 // Initializes kernel log
 void NkLogInit()
 {
+    NkListInit (&entryList);
     // Ensure we have a console
     if (!PltGetPrimaryCons())
         CpuCrash();    // Just halt

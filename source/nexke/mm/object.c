@@ -76,7 +76,7 @@ void MmDeRefObject (MmObject_t* object)
             MmRemovePage (page);
             // Free it
             MmFreePage (page);
-            iter = NkListIterate (iter);
+            iter = NkListIterate (&object->pageList, iter);
             NkSpinUnlock (&page->lock);
         }
         MmBackendDestroy (object);

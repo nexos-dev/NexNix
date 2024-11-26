@@ -65,6 +65,7 @@ typedef struct _thread
     id_t tid;            // Thread ID
     const char* name;    // Name of thread
     int priority;        // Priority of this thread
+    int policy;          // Scheduling policy of thread
     int state;           // State of this thread
     int flags;           // Flags for this thread
     int refCount;        // Things referencing this thread
@@ -102,7 +103,9 @@ typedef struct _thread
 #define TskUnlockRq(ccb) NkSpinUnlock (&(ccb)->rqLock)
 
 // Thread flags
-#define TSK_THREAD_IDLE (1 << 0)
+#define TSK_THREAD_IDLE       (1 << 0)
+#define TSK_THREAD_FIXED_PRIO (1 << 1)
+#define TSK_THREAD_FIFO       (1 << 2)
 
 // Helpers for wait assertion
 static FORCEINLINE void TskThreadSetAssert (NkThread_t* thread, int val)
@@ -125,6 +128,17 @@ static FORCEINLINE void TskThreadCheckAssert (NkThread_t* thread)
 #define TSK_THREAD_CREATED     3
 #define TSK_THREAD_TERMINATING 4
 
+// Scheduling policies
+#define TSK_POLICY_NORMAL 0
+#define TSK_POLICY_FIFO   1
+#define TSK_POLICY_RR     2
+
+// Scheduling priority bases
+#define TSK_PRIO_HIGH   0
+#define TSK_PRIO_KERNEL 8
+#define TSK_PRIO_USER   30
+#define TSK_PRIO_WORKER 63
+
 // Maybe this should be bigger
 #define NEXKE_MAX_THREAD 8192
 
@@ -135,7 +149,12 @@ void TskInitSys();
 void TskInitSched();
 
 // Creates a new thread object
-NkThread_t* TskCreateThread (NkThreadEntry entry, void* arg, const char* name, int flags);
+NkThread_t* TskCreateThread (NkThreadEntry entry,
+                             void* arg,
+                             const char* name,
+                             int policy,
+                             int prio,
+                             int flags);
 
 // Sets the initial thread to execute in the system
 void __attribute__ ((noreturn)) TskSetInitialThread (NkThread_t* thread);
@@ -224,6 +243,9 @@ errno_t TskJoinThread (NkThread_t* thread);
 
 // Waits for thread termination with time out
 errno_t TskJoinThreadTimeout (NkThread_t* thread, ktime_t timeout);
+
+// Sets the priority of a thread
+void TskSetThreadPrio (NkThread_t* thread, int newPrio);
 
 // Quantum stuff
 

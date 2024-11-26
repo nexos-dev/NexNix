@@ -88,7 +88,8 @@ NkWorkQueue_t* NkWorkQueueCreate (NkWorkCallback cb, int type, int flags, int pr
         NkTimeSetCbEvent (queue->timer, NkWorkTimer, (void*) queue);
     }
     // Create thread
-    queue->thread = TskCreateThread (NkWorkScheduler, queue, "NkWorkScheduler", 0);
+    queue->thread =
+        TskCreateThread (NkWorkScheduler, queue, "NkWorkScheduler", TSK_POLICY_NORMAL, prio, 0);
     if (!queue->thread)
     {
         NkTimeFreeEvent (queue->timer);

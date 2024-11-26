@@ -43,6 +43,9 @@ static void TskIdleThread (void*)
         CpuHalt();
 }
 
+// Forward declaration as this is called by tskReadyThread
+static inline void tskPreempt();
+
 // Admits thread to ready queue
 // If this thread was preempted, it's added to the front;
 // otherwise, its added to the tail
@@ -56,23 +59,28 @@ static FORCEINLINE void tskReadyThread (NkCcb_t* ccb, NkThread_t* thread)
         thread->preempted = false;    // Reset flag as preemption doesn't matter anymore
         // Only add to front if this wasn't due to quantum expirt
         if (thread->quantaLeft == 0)
-            NkListAddBack (&ccb->readyQueue, &thread->link);
+            NkListAddBack (&ccb->readyQueues[thread->priority], &thread->link);
         else
-            NkListAddFront (&ccb->readyQueue, &thread->link);
+            NkListAddFront (&ccb->readyQueues[thread->priority], &thread->link);
     }
     else
     {
-        NkListAddBack (&ccb->readyQueue, &thread->link);    // For FCFS
+        NkListAddBack (&ccb->readyQueues[thread->priority], &thread->link);    // For FCFS
     }
+    // Update priority mask
+    ccb->readyMask |= (1ULL << thread->priority);
     // Reset quantum of thread
     thread->quantaLeft = thread->quantum;
     thread->state = TSK_THREAD_READY;
+    // Check for preemption
+    if (thread->priority < ccb->curPriority)
+        tskPreempt();
 }
 
 // Hook to prepare thread to stop running and let another thread run
 static FORCEINLINE void tskStopThread (NkCcb_t* ccb, NkThread_t* thread)
 {
-    NkSpinLock (&thread->lock);
+    TskLockThread (thread);
     assert (PltGetIpl() == PLT_IPL_HIGH);
     // Update runtime of thread
     thread->runTime += (clock->getTime() - thread->lastSchedule);
@@ -85,7 +93,7 @@ static FORCEINLINE void tskStopThread (NkCcb_t* ccb, NkThread_t* thread)
     }
     else if (thread->state == TSK_THREAD_WAITING)
         TskThreadSetAssert (thread, 0);
-    NkSpinUnlock (&thread->lock);
+    TskUnlockThread (thread);
 }
 
 // Sets the current thread
@@ -93,19 +101,17 @@ static FORCEINLINE void tskStopThread (NkCcb_t* ccb, NkThread_t* thread)
 static FORCEINLINE void tskSetCurrentThread (NkCcb_t* ccb, NkThread_t* thread)
 {
     assert (PltGetIpl() == PLT_IPL_HIGH);
-    // Set new thread as current
+    NkThread_t* oldThread = ccb->curThread;
+    // Set new thread as running
     thread->state = TSK_THREAD_RUNNING;
-    // Stop the thread
     // Set last schedule time
     thread->lastSchedule = clock->getTime();
-    // Get current thread and stop it
-    NkThread_t* oldThread = ccb->curThread;
-    assert (oldThread);
-    tskStopThread (ccb, oldThread);
     // Make it current
     ccb->curThread = thread;
+    ccb->curPriority = thread->priority;
     // Do a context swap
-    CpuSwitchContext (thread->context, &oldThread->context);
+    if (thread != oldThread)
+        CpuSwitchContext (thread->context, &oldThread->context);
     // NOTE: from the CPU's perspective, we return from CpuSwitchContext in the new thread
     // From oldThread's perspective, it pauses, and then whenever it gets queue again, returns here
     // From thread's perspective, it resumes from a previous pause here
@@ -119,18 +125,28 @@ static FORCEINLINE void tskSetCurrentThread (NkCcb_t* ccb, NkThread_t* thread)
 static FORCEINLINE void tskSchedule (NkCcb_t* ccb)
 {
     assert (PltGetIpl() == PLT_IPL_HIGH);
-    // Grab next thread and current thread
-    NkThread_t* nextThread = (NkThread_t*) NkListFront (&ccb->readyQueue);
-    if (!nextThread)
+    NkThread_t* nextThread = NULL;
+    NkThread_t* curThread = ccb->curThread;
+    // Stop current thread
+    tskStopThread (ccb, curThread);
+    // Get highest runnable priority
+    int highPrio = CpuScanPriority (ccb->readyMask);
+    if (highPrio == -1)
     {
         // We either keep going or idle
         // This depends on the thread's state
-        if (ccb->curThread->state == TSK_THREAD_RUNNING)
+        if (curThread->state == TSK_THREAD_RUNNING)
             return;                      // Don't do anything
         nextThread = ccb->idleThread;    // Run idle thread
     }
     else
-        NkListRemove (&ccb->readyQueue, (NkLink_t*) nextThread);
+    {
+        NkList_t* queue = &ccb->readyQueues[highPrio];
+        nextThread = (NkThread_t*) NkListFront (queue);
+        NkListRemove (queue, (NkLink_t*) nextThread);
+        if (!NkListFront (queue))
+            ccb->readyMask &= ~(1ULL << highPrio);
+    }
     // Execute the thread
     tskSetCurrentThread (ccb, nextThread);
 }
@@ -155,7 +171,7 @@ void __attribute__ ((noreturn)) TskSetInitialThread (NkThread_t* thread)
 }
 
 // Preempts current thread
-static FORCEINLINE void tskPreempt()
+static inline void tskPreempt()
 {
     assert (PltGetIpl() == PLT_IPL_HIGH);
     NkCcb_t* ccb = CpuGetCcb();
@@ -170,6 +186,90 @@ static FORCEINLINE void tskPreempt()
         tskSchedule (ccb);    // Schedule the next thread
         TskUnlockRq (ccb);
     }
+}
+
+// Sets the priority of a thread
+void TskSetThreadPrio (NkThread_t* thread, int newPrio)
+{
+    NkCcb_t* ccb = CpuGetCcb();
+    ipl_t ipl = PltRaiseIpl (PLT_IPL_HIGH);
+    // Lock the thread briefly to sample the current state
+    TskLockThread (thread);
+    int state = thread->state;
+    TskUnlockThread (thread);
+    if (thread->priority != newPrio)
+    {
+        // We need to loop this in case there is a state change between the read and the lock
+        for (;;)
+        {
+            if (state == TSK_THREAD_RUNNING)
+            {
+                TskLockThread (thread);
+                // Make sure it didn't change
+                if (thread != ccb->curThread)
+                {
+                    TskUnlockThread (thread);
+                    continue;
+                }
+                // Set the new priority and save the onld one
+                int curPrio = thread->priority;
+                thread->priority = newPrio;
+                ccb->curPriority = newPrio;
+                // Check if we need to preempt as this may have resulted in it no longer being the
+                // highest priority runnable thread
+                if (newPrio > curPrio)
+                {
+                    if (ccb->readyMask && CpuScanPriority (ccb->readyMask) < newPrio)
+                    {
+                        tskPreempt();    // Queue up preemption
+                    }
+                }
+                TskUnlockThread (thread);
+            }
+            else if (state == TSK_THREAD_READY)
+            {
+                // Thread is current on the ready queue, lock and then make sure it didn't change
+                TskLockRq (ccb);
+                TskLockThread (thread);
+                if (thread->state != TSK_THREAD_READY)
+                {
+                    TskUnlockThread (thread);
+                    TskUnlockRq (ccb);
+                    continue;
+                }
+                // Remove from old queue
+                int curPrio = thread->priority;
+                NkList_t* curQueue = &ccb->readyQueues[curPrio];
+                NkListRemove (curQueue, &thread->link);
+                if (!NkListFront (curQueue))
+                    ccb->readyMask &= ~(1ULL << curPrio);
+                // Add to new queue
+                NkList_t* newQueue = &ccb->readyQueues[newPrio];
+                thread->priority = newPrio;
+                NkListAddBack (newQueue, &thread->link);
+                ccb->readyMask |= (1ULL << newPrio);
+                // Check for preemption
+                if (thread->priority < ccb->curPriority)
+                    tskPreempt();
+                TskUnlockThread (thread);
+                TskUnlockRq (ccb);
+            }
+            else
+            {
+                TskLockThread (thread);
+                // Make sure it didn't change
+                if (thread->state != state)
+                {
+                    TskUnlockThread (thread);
+                    continue;
+                }
+                thread->priority = newPrio;
+                TskUnlockThread (thread);
+            }
+            break;
+        }
+    }
+    PltLowerIpl (ipl);
 }
 
 // Enables preemption
@@ -241,13 +341,16 @@ static void TskTimeSlice (NkTimeEvent_t* evt, void* arg)
     // Get current thread
     NkCcb_t* ccb = CpuGetCcb();
     NkThread_t* curThread = ccb->curThread;
-    NkSpinLock (&curThread->lock);
-    // Check for quantum expiry
-    if (curThread->quantaLeft == 0)
-        tskPreempt();    // Mark it for preemption
-    else
-        --curThread->quantaLeft;
-    NkSpinUnlock (&curThread->lock);
+    TskLockThread (curThread);
+    if (!(curThread->flags & TSK_THREAD_FIFO))
+    {
+        // Check for quantum expiry
+        if (curThread->quantaLeft == 0)
+            tskPreempt();    // Mark it for preemption
+        else
+            --curThread->quantaLeft;
+    }
+    TskUnlockThread (curThread);
     PltLowerIpl (ipl);
 }
 
@@ -257,8 +360,15 @@ void TskInitSched()
     // Create the idle thread
     NkCcb_t* ccb = CpuGetCcb();
     ccb->preemptDisable = 0;
-    ccb->idleThread = TskCreateThread (TskIdleThread, NULL, "TskIdleThread", TSK_THREAD_IDLE);
+    ccb->idleThread = TskCreateThread (TskIdleThread,
+                                       NULL,
+                                       "TskIdleThread",
+                                       TSK_POLICY_FIFO,
+                                       TSK_PRIO_WORKER,
+                                       TSK_THREAD_IDLE);
     assert (ccb->idleThread);
+    for (int i = 0; i < NEXKE_MAX_PRIO; ++i)
+        NkListInit (&ccb->readyQueues[i]);
     // Get clock
     clock = PltGetPlatform()->clock;
     // Set initial time slicing event

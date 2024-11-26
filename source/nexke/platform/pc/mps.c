@@ -151,7 +151,7 @@ static inline PltIntCtrl_t* pltGetIntCtrl (int id)
         PltIntCtrl_t* cur = LINK_CONTAINER (iter, PltIntCtrl_t, link);
         if (cur->id == id)
             return cur;
-        iter = NkListIterate (iter);
+        iter = NkListIterate (&PltGetPlatform()->intCtrls, iter);
     }
     return NULL;
 }

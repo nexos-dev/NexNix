@@ -183,9 +183,13 @@ void MmInitKvm1()
     arena->end = bootPoolEnd;
     arena->numPages = (bootInfo->memPoolSize / NEXKE_CPU_PAGESZ) - arena->resvdSz;
     arena->numFreePages = arena->numPages;
+    NkListInit (&arena->freeList);
     // Initialize buckets
     for (int i = 0; i < MM_KV_MAX_BUCKETS; ++i)
+    {
+        NkListInit (&arena->buckets[i].regionList);
         arena->buckets[i].bucketNum = i;
+    }
     // Create a region for the entire arena
     MmKvRegion_t* firstRegion =
         mmKvGetRegion (arena, arena->start + (arena->resvdSz * NEXKE_CPU_PAGESZ));
@@ -231,9 +235,13 @@ void MmInitKvm2()
     arena->numPages =
         ((kmemSpace.endAddr - kmemSpace.startAddr) >> NEXKE_CPU_PAGE_SHIFT) - arena->resvdSz;
     arena->numFreePages = arena->numPages;
+    NkListInit (&arena->freeList);
     // Initialize buckets
     for (int i = 0; i < MM_KV_MAX_BUCKETS; ++i)
+    {
+        NkListInit (&arena->buckets[i].regionList);
         arena->buckets[i].bucketNum = i;
+    }
     // Create a region for the entire arena
     MmKvRegion_t* firstRegion =
         mmKvGetRegion (arena, kmemSpace.startAddr + (arena->resvdSz * NEXKE_CPU_PAGESZ));
@@ -335,7 +343,7 @@ static MmKvRegion_t* mmAllocKvInArena (MmKvArena_t* arena, size_t numPages)
                 break;
             }
             NkSpinUnlock (&curRegion->lock);
-            iter = NkListIterate (iter);
+            iter = NkListIterate (&bucket->regionList, iter);
         }
         // Did we find a region
         if (foundRegion)
@@ -410,7 +418,8 @@ static void* mmKvAllocFreeList (MmKvArena_t* arena)
     if (arena->freeListSz)
     {
         // Get link of first entry
-        NkLink_t* link = NkListPopFront (&arena->freeList);
+        NkLink_t* link = NkListFront (&arena->freeList);
+        NkListRemove (&arena->freeList, link);
         MmKvRegion_t* region = LINK_CONTAINER (link, MmKvRegion_t, link);
         region->isFree = false;
         --arena->freeListSz;

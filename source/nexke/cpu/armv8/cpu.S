@@ -44,3 +44,12 @@ MmMulFlushTlb:
 .global CpuSwitchContext
 CpuSwitchContext:
 
+// Performs a resverse bit scan
+// Used for priority checking
+.global CpuScanPriority
+CpuScanPriority:
+    clz w8, w0
+    mov w9, #31
+    sub w0, w9, w8
+    ret
+

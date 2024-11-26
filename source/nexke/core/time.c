@@ -20,11 +20,13 @@
 #include <nexke/platform.h>
 #include <string.h>
 
-// Platform pointer
-static NkPlatform_t* platform = NULL;
-
 // Event cache
 static SlabCache_t* nkEventCache = NULL;
+
+// Timer pointer
+static PltHwTimer_t* nkTimer = NULL;
+// Clock pointer
+static PltHwClock_t* nkClock = NULL;
 
 // Allocates a timer event
 NkTimeEvent_t* NkTimeNewEvent()
@@ -40,14 +42,14 @@ void NkTimeFreeEvent (NkTimeEvent_t* event)
 }
 
 // Converts a delta to a deadline
-static ktime_t NkTimeDeltaToDeadline (ktime_t* delta)
+static FORCEINLINE ktime_t NkTimeDeltaToDeadline (ktime_t* delta)
 {
     // Get ref tick
-    ktime_t refTick = platform->clock->getTime();
+    ktime_t refTick = nkClock->getTime();
     ktime_t deadline = refTick + *delta;
     // Round to next multiple of timer precision
-    deadline += platform->timer->precision;
-    deadline -= (deadline % platform->timer->precision);
+    deadline += nkTimer->precision;
+    deadline -= (deadline % nkTimer->precision);
     // If deadline equals ref tick (i.e., delta is 0) increase it by one tick
     if (refTick == deadline)
     {
@@ -83,13 +85,13 @@ static FORCEINLINE void nkTimeEvtAdmit (NkCcb_t* ccb, NkTimeEvent_t* event, ktim
                 NkListAddBefore (list, iter, &event->link);
                 break;    // Exit loop
             }
-            else if (!iter->next)
+            else if (iter->next == list)
             {
                 // Add after
                 NkListAdd (list, iter, &event->link);
                 break;
             }
-            iter = NkListIterate (iter);    // To next spot
+            iter = NkListIterate (list, iter);    // To next spot
         }
     }
     // If this event is in the front, then we need to arm the timer
@@ -98,10 +100,10 @@ static FORCEINLINE void nkTimeEvtAdmit (NkCcb_t* ccb, NkTimeEvent_t* event, ktim
     if (&event->link == NkListFront (&ccb->timeEvents))
     {
         // Arm timer if needed
-        if (platform->timer->type != PLT_TIMER_SOFT)
+        if (nkTimer->type != PLT_TIMER_SOFT)
         {
             // Arm timer
-            platform->timer->armTimer (delta);
+            nkTimer->armTimer (delta);
             ccb->nextDeadline = event->deadline;
         }
     }
@@ -122,16 +124,16 @@ static FORCEINLINE void nkTimeEvtRemove (NkCcb_t* ccb, NkTimeEvent_t* event)
     if (isHead)
     {
         // Now we need to re-arm the timer
-        if (platform->timer->type != PLT_TIMER_SOFT)
+        if (nkTimer->type != PLT_TIMER_SOFT)
         {
             ktime_t deadline = event->deadline;
-            int64_t delta = deadline - platform->clock->getTime();
+            int64_t delta = deadline - nkClock->getTime();
             if (delta < 0)
             {
                 // TODO: is there a better way of handling this?
                 delta = 0;
             }
-            platform->timer->armTimer (delta);
+            nkTimer->armTimer (delta);
             ccb->nextDeadline = event->deadline;
         }
     }
@@ -232,8 +234,8 @@ static FORCEINLINE void nkDrainTimeQueue (NkCcb_t* ccb, NkList_t* list, NkLink_t
         NkSpinLock (&event->lock);
         // Event has expired, remove from list and call handler
         event->inUse = false;
-        NkLink_t* oldIter = iter;       // Save this iterator
-        iter = NkListIterate (iter);    // To next one
+        NkLink_t* oldIter = iter;             // Save this iterator
+        iter = NkListIterate (list, iter);    // To next one
         NkListRemove (list, oldIter);
         event->expired = true;    // Set expiry flag
         // Call the event handler
@@ -272,13 +274,13 @@ void NkTimeHandler()
     // If this is a software timer, we need to tick through the event until it expires
     // Otherwise, then an event has occured and we just need to execute each handler for this
     // deadline
-    if (platform->timer->type == PLT_TIMER_SOFT)
+    if (nkTimer->type == PLT_TIMER_SOFT)
     {
         // Check if timers have expired
         NkTimeEvent_t* event = LINK_CONTAINER (iter, NkTimeEvent_t, link);
         // Set deadline in CCB
         ccb->nextDeadline = event->deadline;
-        if (event->deadline == platform->clock->getTime())
+        if (event->deadline == nkClock->getTime())
             nkDrainTimeQueue (ccb, list, iter);
     }
     else
@@ -292,13 +294,13 @@ void NkTimeHandler()
         {
             NkTimeEvent_t* event = LINK_CONTAINER (front, NkTimeEvent_t, link);
             NkSpinLock (&event->lock);
-            int64_t delta = event->deadline - platform->clock->getTime();
+            int64_t delta = event->deadline - nkClock->getTime();
             if (delta < 0)
             {
                 // TODO: is there a better way of handling this?
                 delta = 0;
             }
-            platform->timer->armTimer (delta);
+            nkTimer->armTimer (delta);
             ccb->nextDeadline = event->deadline;
             NkSpinUnlock (&event->lock);
         }
@@ -311,7 +313,7 @@ void NkTimeHandler()
 void NkPoll (ktime_t time)
 {
     ipl_t ipl = PltRaiseIpl (PLT_IPL_TIMER);
-    platform->clock->poll (time);
+    nkClock->poll (time);
     PltLowerIpl (ipl);
 }
 
@@ -319,8 +321,9 @@ void NkPoll (ktime_t time)
 void NkInitTime()
 {
     NkLogDebug ("nexke: intializing timer\n");
-    platform = PltGetPlatform();
+    nkClock = PltGetPlatform()->clock;
+    nkTimer = PltGetPlatform()->timer;
     NkListInit (&CpuGetCcb()->timeEvents);    // Initialize list
     nkEventCache = MmCacheCreate (sizeof (NkTimeEvent_t), "NkTimeEvent_t", 0, 0);
-    int v = platform->timer->type;
+    assert (nkTimer && nkClock);
 }

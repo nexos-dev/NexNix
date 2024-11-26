@@ -286,7 +286,8 @@ MmPage_t* MmAllocPage()
         return NULL;    // Uh oh
     }
     // Grab a page from the free list
-    NkLink_t* link = NkListPopFront (&zone->freeList);
+    NkLink_t* link = NkListFront (&zone->freeList);
+    NkListRemove (&zone->freeList, link);
     assert (link);
     MmPage_t* page = LINK_CONTAINER (link, MmPage_t, link);
     // Update state fields
@@ -430,7 +431,7 @@ MmPage_t* MmLookupPage (MmObject_t* obj, size_t off)
             NkSpinUnlock (&bucket->lock);
             return curPage;
         }
-        iter = NkListIterate (iter);
+        iter = NkListIterate (&bucket->list, iter);
     }
     NkSpinUnlock (&bucket->lock);
     return NULL;
@@ -586,6 +587,12 @@ void MmInitPage()
                             (uint64_t) mapPhys + (numMapPages * NEXKE_CPU_PAGESZ));
                 // Set page hash map base
                 mmPageHash = (MmPageBucket_t*) (NEXKE_PFNMAP_BASE + pfnMapSz);
+                // Initialize page hash
+                for (int i = 0; i < mmNumBuckets; ++i)
+                {
+                    NkListInit (&mmPageHash[i].list);
+                    mmPageHash[i].lock = 0;
+                }
                 break;
             }
         }
@@ -712,8 +719,6 @@ void MmInitPage()
     // Create page map cache
     mmPageMapCache = MmCacheCreate (sizeof (MmPageMap_t), "MmPageMap_t", 0, 0);
     assert (mmPageMapCache);
-    // Clear the hash map
-    memset (mmPageHash, 0, mmNumBuckets * sizeof (MmPageBucket_t));
 }
 
 // Dumps out page debugging info

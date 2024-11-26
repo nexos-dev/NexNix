@@ -309,13 +309,14 @@ NkInterrupt_t* PltRemapInterrupt (NkInterrupt_t* oldInt, int newVector, ipl_t ne
     else
         newInt = oldInt;
     // Change vector and IPL on all the interrupts
-    NkLink_t* iter = NkListFront (&newInt->intChain->list);
+    NkList_t* chain = &newInt->intChain->list;
+    NkLink_t* iter = NkListFront (chain);
     while (iter)
     {
         NkHwInterrupt_t* curInt = LINK_CONTAINER (iter, NkHwInterrupt_t, link);
         curInt->vector = newVector;
         curInt->ipl = newIpl;
-        iter = NkListIterate (iter);
+        iter = NkListIterate (chain, iter);
     }
     return newInt;
 }
@@ -484,7 +485,8 @@ void PltTrapDispatch (CpuIntContext_t* context)
         {
             // Loop over the entire chain, trying to find a interrupt that can handle it
             NkSpinLock (&intObj->intChain->lock);
-            NkLink_t* iter = NkListFront (&intObj->intChain->list);
+            NkList_t* chain = &intObj->intChain->list;
+            NkLink_t* iter = NkListFront (chain);
             NkHwInterrupt_t* curInt = LINK_CONTAINER (iter, NkHwInterrupt_t, link);
             ipl_t oldIpl = ccb->curIpl;
             ccb->curIpl = curInt->ipl;    // Set IPL
@@ -498,7 +500,7 @@ void PltTrapDispatch (CpuIntContext_t* context)
                 // Disable them again
                 CpuDisable();
                 NkSpinLock (&intObj->intChain->lock);
-                iter = NkListIterate (iter);
+                iter = NkListIterate (chain, iter);
                 curInt = LINK_CONTAINER (iter, NkHwInterrupt_t, link);
             }
             ccb->curIpl = oldIpl;    // Restore IPL

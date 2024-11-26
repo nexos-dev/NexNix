@@ -97,7 +97,8 @@ static FORCEINLINE void nkHashChunk (NkResArena_t* arena, NkResChunk_t* chunk, i
 static FORCEINLINE NkResChunk_t* nkGetChunk (NkResArena_t* arena, id_t baseId)
 {
     size_t idx = baseId % NK_NUM_CHUNK_HASH;
-    NkLink_t* iter = NkListFront (&arena->chunkHash[idx]);
+    NkList_t* list = &arena->chunkHash[idx];
+    NkLink_t* iter = NkListFront (list);
     NkResChunk_t* chunk = NULL;
     NkSpinLock (&arena->hashLock);
     while (iter)
@@ -108,7 +109,7 @@ static FORCEINLINE NkResChunk_t* nkGetChunk (NkResArena_t* arena, id_t baseId)
             NkSpinLock (&chunk->chunkLock);
             break;
         }
-        iter = NkListIterate (iter);
+        iter = NkListIterate (list, iter);
     }
     NkSpinUnlock (&arena->hashLock);
     return chunk;
@@ -128,7 +129,8 @@ static FORCEINLINE void nkSortChunk (NkResArena_t* arena, NkResChunk_t* chunk)
     // Find where this chunk should go
     // To do this, we go into a loop and check the left and right chunk
     // We keep doing this until we find our spot
-    NkLink_t* iter = chunk->link.prev;
+    NkList_t* chunkList = &arena->chunks;
+    NkLink_t* iter = (chunk->link.prev == chunkList) ? NULL : chunk->link.prev;
     while (1)
     {
         // Get the chunk
@@ -144,19 +146,19 @@ static FORCEINLINE void nkSortChunk (NkResArena_t* arena, NkResChunk_t* chunk)
                 break;    // Nothing to move
             }
             // Move it to this spot
-            NkListRemove (&arena->chunks, &chunk->link);
+            NkListRemove (chunkList, &chunk->link);
             if (!iter)
-                NkListAddFront (&arena->chunks, &chunk->link);
+                NkListAddFront (chunkList, &chunk->link);
             else
-                NkListAddBefore (&arena->chunks, iter, &chunk->link);
+                NkListAddBefore (chunkList, iter, &chunk->link);
             CHUNK_MAYBE_UNLOCK (leftChunk);
             break;
         }
         CHUNK_MAYBE_UNLOCK (leftChunk);
-        iter = iter->prev;
+        iter = (iter->prev == chunkList) ? NULL : iter->prev;
     }
     // Now move to right
-    iter = chunk->link.next;
+    iter = (chunk->link.next == chunkList) ? NULL : chunk->link.next;
     while (1)
     {
         // Get the chunk
@@ -181,7 +183,7 @@ static FORCEINLINE void nkSortChunk (NkResArena_t* arena, NkResChunk_t* chunk)
             break;
         }
         CHUNK_MAYBE_UNLOCK (rightChunk);
-        iter = NkListIterate (iter);
+        iter = NkListIterate (chunkList, iter);
     }
 }
 
@@ -343,7 +345,7 @@ void NkDestroyResource (NkResArena_t* arena)
     {
         NkResChunk_t* chunk = LINK_CONTAINER (iter, NkResChunk_t, link);
         MmCacheFree (chunkCache, chunk);
-        iter = NkListIterate (iter);
+        iter = NkListIterate (&arena->chunks, iter);
     }
     // Remove from list
     NkSpinLock (&arenasLock);
@@ -355,6 +357,7 @@ void NkDestroyResource (NkResArena_t* arena)
 // Initializes resource system
 void NkInitResource()
 {
+    NkListInit (&arenas);
     // Create caches
     arenaCache = MmCacheCreate (sizeof (NkResArena_t), "NkResArena_t", 0, 0);
     chunkCache = MmCacheCreate (sizeof (NkResChunk_t), "NkResChunk_t", 0, 0);

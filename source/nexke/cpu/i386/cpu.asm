@@ -147,3 +147,22 @@ CpuSwitchContext:
     pop ebx
     pop ebp
     ret
+
+; Performs a resverse bit scan
+; Used for priority checking
+global CpuScanPriority
+CpuScanPriority:
+    mov ecx, [esp+4]
+    mov edx, [esp+8]
+    ; Scan the lower 32 bits
+    bsf eax, ecx
+    jz .highBits
+    ret
+.highBits:
+    bsf eax, edx
+    jz .zero
+    add eax, 32
+    ret
+.zero:
+    mov eax, -1
+    ret

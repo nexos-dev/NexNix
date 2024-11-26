@@ -166,6 +166,7 @@ void __attribute__ ((noreturn)) CpuCrash()
 
 void CpuPrintDebug (CpuIntContext_t* context)
 {
+    CpuGetCcb()->intActive = true;
     // Basically we just dump all the registers
     va_list ap;
     NkLogMessage ("CPU dump:\n", NK_LOGLEVEL_EMERGENCY, ap);
@@ -210,10 +211,20 @@ void CpuPrintDebug (CpuIntContext_t* context)
              context->ss);
     NkLogMessage (buf, NK_LOGLEVEL_EMERGENCY, ap);
     sprintf (buf,
-             "eip: %#08lx eflags: %#08lx errcode: %#lX intno: %#02lX",
+             "eip: %#08lx eflags: %#08lx errcode: %#lX intno: %#02lX\n",
              context->eip,
              context->eflags,
              context->errCode,
              context->intNo);
     NkLogMessage (buf, NK_LOGLEVEL_EMERGENCY, ap);
+    // Do a backtrace
+    uint32_t curFrame = context->ebp;
+    NkLogMessage ("Stack trace:\n", NK_LOGLEVEL_EMERGENCY, ap);
+    while (curFrame)
+    {
+        uint32_t* ptr = (uint32_t*) curFrame;
+        sprintf (buf, "%#08lX: %#08lX\n", *ptr, *(ptr + 1));
+        NkLogMessage (buf, NK_LOGLEVEL_EMERGENCY, ap);
+        curFrame = *ptr;
+    }
 }

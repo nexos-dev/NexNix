@@ -62,6 +62,7 @@ void MmMulInit()
     memset (mulSpace, 0, sizeof (MmMulSpace_t));
     mulSpace->base = (paddr_t) pdpt;
     mulSpace->refCount = 1;
+    NkListInit (&mulSpace->pageList);
     NkListAddFront (&mulSpace->pageList, &cachePgCtrl->link);
     // Prepare page table cache
     MmPtabInitCache (MmGetKernelSpace());
@@ -725,7 +726,7 @@ void MmMulMapEarly (uintptr_t virt, paddr_t phys, int flags)
         pgFlags |= PF_CD;
     if (flags & MUL_PAGE_WT)
         pgFlags |= PF_WT;
-    if (perm & MUL_PAGE_DEV)
+    if (flags & MUL_PAGE_DEV)
         pgFlags |= PF_CD;
     // Get indices
     uint32_t pdptIdx = PG_ADDR_PDPT (virt);
